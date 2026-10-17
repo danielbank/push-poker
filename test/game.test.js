@@ -112,3 +112,15 @@ test('spectator view with neutral rows does not throw', () => {
   const { s } = table(2)
   assert.doesNotThrow(() => G.viewFor(s, null, new Set()))
 })
+
+test('putting the hole card down at an end cannot push it straight back out', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' })
+  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', slot: 0, eject: 'left' }), /straight out of play/)
+  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', slot: 5, eject: 'right' }), /straight out of play/)
+  G.applyMove(s, a.id, { type: 'putDown', slot: 0, eject: 'right' })
+  assert.equal(s.rows[0].cards[0], 0)
+  assert.equal(a.hole, null)
+})

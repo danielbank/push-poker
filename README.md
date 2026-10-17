@@ -40,7 +40,7 @@ On your turn you make exactly one move:
 - **◀ ▶ Shift your row.** Your in-play cards slide one step left or right. A card leaves play at one end, and the next out-of-play card enters at the other. The row wraps, so you can always shift.
 - **▲ ▼ Shift a column.** Pick one of the 5 columns. The in-play card in that column moves one row up or down through all 4 rows, wrapping from top to bottom. This is how cards change hands between players.
 - **Pick up a hole card.** Tap a card in your row to take it as your hole card. It is hidden from the other players and safe from every shift. Choose whether the gap fills from the left or the right, so you still have 5 cards in play. You can hold one hole card at a time.
-- **Put your hole card down.** Tap your hole card, tap a **+** to choose where it goes in your row, then choose which end card gets pushed out of play.
+- **Put your hole card down.** Tap your hole card, tap a **+** to choose where it goes in your row, then choose which end card gets pushed out of play. If you put it at the very start or end of the row, the card at the other end is pushed out automatically, so your hole card can never go straight back out of play.
 - **Knock.** Allowed once 5 full rounds are done (every player has moved 5 times). Knocking uses up your move. Every other player then gets one last move, and then the hands are compared.
 
 ### Showdown
