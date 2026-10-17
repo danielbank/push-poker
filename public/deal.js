@@ -4,7 +4,8 @@
  *   slinky    - MS Solitaire style: cards arc out of the deck on parabolic paths, leaving trails
  *   riffle    - the deck splits into two piles that interlace, squares up a few times, then deals
  *   explosion - the deck flashes, compresses and shakes, blasts away, then rains down into place
- * Any tap or key press skips to the end. Relies on `ui`, `$app` and `shake()`-style helpers from app.js.
+ * Any tap or key press skips to the end. Relies on `ui` and `$app` from app.js, and on noiseHit() and
+ * toneHit() from sound.js for the sound effects.
  */
 
 const DEAL_STYLES = ['slinky', 'riffle', 'explosion']
@@ -31,7 +32,7 @@ function dealShow(style = DEAL_STYLES[(Math.random() * DEAL_STYLES.length) | 0])
   const layer = document.createElement('div')
   layer.className = 'deal-layer'
   document.body.appendChild(layer)
-  dealRun = { layer, anims: [], timers: [] }
+  dealRun = { layer, anims: [], timers: [], sounds: [] }
   dealRun.timers.push(setTimeout(finishDeal, 9000)) // safety net: never leave cards hidden
 
   const ctx = { layer, deck, w, h, targets }
@@ -39,7 +40,11 @@ function dealShow(style = DEAL_STYLES[(Math.random() * DEAL_STYLES.length) | 0])
   // Only this deal may finish itself; a deal that was stopped (skipped or replaced) just goes quiet.
   const run = dealRun
   const done = () => { if (dealRun === run) finishDeal() }
-  routine(ctx).then(done, done)
+  routine(ctx).then(done, (e) => {
+    // Stopping a deal cancels its animations (AbortError); anything else is a real bug worth seeing.
+    if (e?.name !== 'AbortError' && e?.message !== 'deal stopped') console.error('Deal failed:', e)
+    done()
+  })
 }
 
 function stopRoutine() {
@@ -48,6 +53,7 @@ function stopRoutine() {
   if (!run) return
   run.timers.forEach(clearTimeout)
   run.anims.forEach((a) => { try { a.cancel() } catch {} })
+  run.sounds.forEach((src) => { try { src.stop() } catch {} })
   run.layer.remove()
 }
 
@@ -92,11 +98,39 @@ const rand = (a, b) => a + Math.random() * (b - a)
 
 // The real card for this id flips into view.
 function reveal(id) {
+  sfx.snap()
   ui.dealPending?.delete(id)
   const el = $app.querySelector(`.board .card[data-card="${id}"]`)
   if (!el) return
   el.classList.remove('deal-pending')
   el.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], { duration: 160, easing: 'ease-out' })
+}
+
+/* ---------- Sound effects (synthesized; cut off if the deal is skipped) ---------- */
+
+// Keep each scheduled sound so a skipped deal can silence it.
+const sound = (src) => { if (src && dealRun) dealRun.sounds.push(src) }
+const sfx = {
+  // A crisp card snap as a card lands.
+  snap: (at = 0) => sound(noiseHit({ at, dur: 0.035, sharp: 6, freq: rand(2600, 3600), q: 1.4, gain: 0.55 })),
+  // One card slapping onto the others mid-riffle: shorter and softer than a snap.
+  click: (at = 0) => sound(noiseHit({ at, dur: 0.018, sharp: 5, freq: rand(3000, 4500), q: 1.2, gain: 0.3 })),
+  // Air moving as a card flies: a noise band sweeping up then fading.
+  whoosh: (at = 0, dur = 0.5) => sound(noiseHit({ at, dur, sharp: 1.5, freq: 500, toFreq: 2400, q: 0.8, gain: 0.18 })),
+  // The deck being split: a short shuffle of noise.
+  swish: (at = 0) => sound(noiseHit({ at, dur: 0.16, sharp: 2, freq: 1800, toFreq: 900, q: 0.7, gain: 0.25 })),
+  // An 8-bit beep for each flash.
+  blip: (at = 0, hi = false) => sound(toneHit({ at, dur: 0.07, type: 'square', freq: hi ? 1320 : 880, gain: 0.08 })),
+  // Pressure building: a buzzy tone climbing in pitch, with a rumble under it.
+  rumble: (at = 0, dur = 0.6) => {
+    sound(toneHit({ at, dur, type: 'sawtooth', freq: 60, toFreq: 240, gain: 0.08, attack: dur * 0.8 }))
+    sound(noiseHit({ at, dur, sharp: 0.5, type: 'lowpass', freq: 200, toFreq: 900, q: 0.6, gain: 0.25 }))
+  },
+  // The blast: a deep falling thump plus a long burst of noise.
+  boom: (at = 0) => {
+    sound(toneHit({ at, dur: 0.6, type: 'sine', freq: 140, toFreq: 32, gain: 0.6 }))
+    sound(noiseHit({ at, dur: 0.9, sharp: 3, type: 'lowpass', freq: 2200, toFreq: 120, q: 0.5, gain: 0.6 }))
+  },
 }
 
 const at = (x, y, rot = 0, extra = '') => `translate(${x}px, ${y}px) rotate(${rot}deg) ${extra}`
@@ -135,6 +169,7 @@ async function slinky(ctx) {
   const pile = stack(ctx, 6)
   const DURATION = 760
   const flights = ctx.targets.map((t, i) => wait(i * 85).then(() => {
+    sfx.whoosh(0, DURATION / 1000)
     // A quadratic arc from the deck up over a peak and down onto the card's spot.
     const lift = rand(140, 260)
     const cx = t.dx / 2 + rand(-80, 80)
@@ -172,6 +207,7 @@ async function riffle(ctx) {
     const left = order.slice(0, half)
     const right = order.slice(half)
     // Split into two piles, angled toward each other.
+    sfx.swish()
     await Promise.all([
       ...left.map((el, i) => play(el, [{ transform: el.style.transform }, { transform: at(-ctx.w * 0.62, -i * 0.35, -7) }], { duration: 200, easing: 'ease-out' })
         .then(() => { el.style.transform = at(-ctx.w * 0.62, -i * 0.35, -7) })),
@@ -191,6 +227,8 @@ async function riffle(ctx) {
       }
       fromLeft = !fromLeft
     }
+    // The "brrrrt": one click as each card lands on the stack.
+    merged.forEach((_, j) => sfx.click((j * 8 + 120) / 1000))
     await Promise.all(merged.map((el, j) => {
       el.style.zIndex = j
       return play(el, [
@@ -215,7 +253,8 @@ async function riffle(ctx) {
 
 async function explosion(ctx) {
   const cards = stack(ctx, 40)
-  // Nintendo-style flashing: hard cuts between normal, blown-out white and inverted.
+  // Nintendo-style flashing: hard cuts between normal, blown-out white and inverted, each with a beep.
+  for (let k = 0; k < 8; k++) sfx.blip(k * 0.08, k % 2 === 1)
   await Promise.all(cards.map((el) => play(el, [
     { filter: 'none' }, { filter: 'brightness(3)' }, { filter: 'none' }, { filter: 'invert(1)' },
     { filter: 'none' }, { filter: 'brightness(3)' }, { filter: 'none' }, { filter: 'invert(1)' }, { filter: 'none' },
@@ -228,9 +267,11 @@ async function explosion(ctx) {
     const j = 2 + p * 5
     squash.push({ transform: `translate(${rand(-j, j)}px, ${rand(-j, j)}px) scale(${1 + 0.12 * p}, ${1 - 0.22 * p})` })
   }
+  sfx.rumble(0, 0.62)
   await Promise.all(cards.map((el, i) => play(el, squash.map((f) => ({ transform: `${at(0, -i * 0.35)} ${f.transform}` })), { duration: 620, easing: 'linear' })))
 
   // Blast: a white flash, a jolt, and every card flies up and away.
+  sfx.boom()
   const flash = document.createElement('div')
   flash.className = 'deal-flash'
   ctx.layer.appendChild(flash)

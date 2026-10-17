@@ -1,6 +1,6 @@
 /* Easter egg: Shift+S slaps the table. Everyone else sees a giant hand swoop across their screen
  * with comic-book POW/BLAM bursts and hears a clap. Purely cosmetic; it never touches the game.
- * Relies on `socket` and `me` from app.js.
+ * Relies on `socket` and `me` from app.js, and the audio helpers in sound.js.
  */
 
 const SLAP_DURATION = 900
@@ -127,18 +127,7 @@ function shuffle(a) {
   return a
 }
 
-/* ---------- Sound (synthesized, no audio files) ---------- */
-
-let audioCtx = null
-// Browsers only allow audio after the page has been interacted with, so unlock on the first tap or key.
-function unlockAudio() {
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)()
-    if (audioCtx.state === 'suspended') audioCtx.resume()
-  } catch {}
-}
-document.addEventListener('pointerdown', unlockAudio)
-document.addEventListener('keydown', unlockAudio)
+/* ---------- Sound (uses audioCtx and noise() from sound.js) ---------- */
 
 // A hand clap: a few very short noise bursts ~10ms apart (the "flam" of skin meeting skin),
 // then a short airy tail, all band-passed into the clap's range.
@@ -174,15 +163,4 @@ function playClapSound() {
   tg.gain.value = 0.55
   tail.connect(tg).connect(band)
   tail.start(t + 0.03)
-}
-
-// White noise with the decay envelope baked in.
-function noise(ctx, seconds, sharpness) {
-  const len = Math.floor(ctx.sampleRate * seconds)
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate)
-  const data = buf.getChannelData(0)
-  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, sharpness)
-  const src = ctx.createBufferSource()
-  src.buffer = buf
-  return src
 }
