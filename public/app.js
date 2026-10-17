@@ -243,35 +243,45 @@ function renderTable(spectator) {
   const mine = !spectator && view.phase === 'playing' && turnPlayer.id === playerId
   const myRow = view.rows.findIndex((r) => r.owner === playerId)
   const p = me()
+  const colArrows = (dir, glyph) => `<div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="${dir}" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} ${dir}">${glyph}</button>`).join('')}</div>`
 
-  return `
-    <div class="scores">${view.players.map((q, i) => `
-      <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
-        ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
-        ${q.hasHole ? '<span class="mini-back" title="Holding a hole card"></span>' : ''}
-        ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
-      </div>`).join('')}
-    </div>
-    ${renderStatus(mine, turnPlayer)}
-    ${view.phase === 'playing' && !turnPlayer.online && !spectator ? `
-      <div class="banner-off"><span class="grow">${esc(turnPlayer.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
-      <button class="btn small ghost" data-act="skip">Skip their move</button></div>` : ''}
-    <div class="board">
-      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="up" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} up">▲</button>`).join('')}</div>
-      ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
-      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="down" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} down">▼</button>`).join('')}</div>
-    </div>
-    ${!spectator && p ? renderMineBar(mine, p) : ''}
-    ${ui.sel ? renderPrompt() : ''}
-    ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
-      <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
-      <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
-      <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
-    <ul class="log">${view.log.map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
-    ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
-      <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
-    ${view.phase === 'showdown' && ui.hideShowdown ? `<div class="row-btns" style="justify-content:center"><button class="btn" data-act="showResults">Show results</button></div>` : ''}
-  `
+  // Two columns on wide screens: the board on the left (at least 2:1), and the scoreboard, status,
+  // your hole card and the game log on the right. Narrow screens stack them in reading order.
+  return `<div class="table-layout">
+    <section class="t-info">
+      <div class="scores">${view.players.map((q, i) => `
+        <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
+          ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
+          ${q.hasHole ? '<span class="mini-back" title="Holding a hole card"></span>' : ''}
+          ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
+        </div>`).join('')}
+      </div>
+      ${renderStatus(mine, turnPlayer)}
+      ${view.phase === 'playing' && !turnPlayer.online && !spectator ? `
+        <div class="banner-off"><span class="grow">${esc(turnPlayer.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
+        <button class="btn small ghost" data-act="skip">Skip their move</button></div>` : ''}
+    </section>
+    <section class="t-board">
+      <div class="board">
+        ${colArrows('up', '▲')}
+        ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
+        ${colArrows('down', '▼')}
+      </div>
+      ${ui.sel ? renderPrompt() : ''}
+      ${view.phase === 'showdown' && ui.hideShowdown ? `<div class="row-btns" style="justify-content:center"><button class="btn" data-act="showResults">Show results</button></div>` : ''}
+    </section>
+    <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
+    <section class="t-log">
+      <h3>Game log</h3>
+      <ul class="log">${[...view.log].reverse().map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
+      ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
+        <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
+        <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
+        <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
+      ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
+        <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
+    </section>
+  </div>`
 }
 
 function renderStatus(mine, turnPlayer) {

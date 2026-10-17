@@ -349,9 +349,9 @@ main {
 .prompt p { font-weight: 600; }
 
 /* Log */
-.log { margin-top: 16px; font-size: 13px; color: var(--ink-dim); }
-.log li { list-style: none; padding: 3px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-.log li:last-child { color: var(--ink); font-weight: 600; }
+.log { font-size: 13px; color: var(--ink-dim); }
+.log li { list-style: none; padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.log li:first-child { color: var(--ink); font-weight: 600; }
 
 /* Showdown */
 .overlay {
@@ -488,4 +488,56 @@ kbd {
   paint-order: stroke fill;
   text-shadow: 3px 3px 0 #111;
   transform: rotate(-8deg);
+}
+
+/* Table layout: board beside a side column (scoreboard, status, your hand, log) on wide screens. */
+.table-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "info" "board" "mine" "log";
+}
+.t-info { grid-area: info; }
+.t-board { grid-area: board; }
+.t-mine { grid-area: mine; }
+.t-mine:empty { display: none; }
+.t-log { grid-area: log; margin-top: 16px; }
+.t-log h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px;
+  margin-bottom: 6px;
+  color: var(--ink-dim);
+}
+.t-log .kbd-hint { text-align: left; }
+
+main:has(.table-layout) { max-width: 1280px; }
+
+@media (min-width: 900px) {
+  .table-layout {
+    /* Board column gets at least two thirds of the width. */
+    grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "board info"
+      "board mine"
+      "board log";
+    column-gap: 24px;
+    align-items: start;
+    /* Cards sized by the board's height budget (the board now has the full screen height) and the
+       board column's width (about two thirds of the page). */
+    --cw: max(44px, min(140px, calc((100vh - 412px) / 5.56), calc((min(100vw, 1280px) * 0.66 - 140px) / 5.4)));
+    /* --ch must be redeclared here: the :root one was computed from the :root --cw. */
+    --ch: calc(var(--cw) * 1.39);
+  }
+  .board { padding: 14px 16px; }
+  .t-board { position: sticky; top: 12px; }
+  .scores { flex-direction: column; overflow: visible; }
+  .score { flex: none; border-radius: 14px; }
+  .t-mine .mine-bar { margin-top: 0; margin-bottom: 4px; }
+  .t-log {
+    margin-top: 12px;
+    max-height: calc(100vh - 420px);
+    min-height: 160px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
 }
