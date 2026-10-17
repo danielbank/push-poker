@@ -88,3 +88,58 @@ function playMoveSound(move) {
     case 'knock': return [0, 0.17, 0.34].forEach(knockHit) // three raps
   }
 }
+
+/* ---------- Fanfare: trumpets for the winner ---------- */
+
+// One brass voice: three slightly detuned sawtooths through a filter that opens on the attack (the
+// "blat"), a quick swell, and vibrato that creeps in on held notes.
+function brass({ at, freq, dur, gain = 0.1 }) {
+  if (!audioReady()) return
+  const ctx = audioCtx
+  const t = ctx.currentTime + at
+  const filter = ctx.createBiquadFilter()
+  filter.type = 'lowpass'
+  filter.Q.value = 2
+  filter.frequency.setValueAtTime(500, t)
+  filter.frequency.exponentialRampToValueAtTime(3200, t + 0.05)
+  filter.frequency.exponentialRampToValueAtTime(1900, t + 0.2)
+  const env = ctx.createGain()
+  env.gain.setValueAtTime(0.0001, t)
+  env.gain.exponentialRampToValueAtTime(gain, t + 0.03)
+  env.gain.setValueAtTime(gain * 0.8, t + 0.12)
+  env.gain.linearRampToValueAtTime(gain, t + Math.max(0.13, dur * 0.6)) // the swell on long notes
+  env.gain.setValueAtTime(gain, t + dur)
+  env.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.18)
+  filter.connect(env).connect(ctx.destination)
+
+  // Vibrato only on held notes, fading in after a moment.
+  let vib = null
+  if (dur > 0.4) {
+    const lfo = ctx.createOscillator()
+    lfo.frequency.value = 5.5
+    vib = ctx.createGain()
+    vib.gain.setValueAtTime(0, t)
+    vib.gain.linearRampToValueAtTime(freq * 0.006, t + 0.45)
+    lfo.connect(vib)
+    lfo.start(t)
+    lfo.stop(t + dur + 0.2)
+  }
+  for (const cents of [-7, 0, 7]) {
+    const osc = ctx.createOscillator()
+    osc.type = 'sawtooth'
+    osc.frequency.value = freq
+    osc.detune.value = cents
+    if (vib) vib.connect(osc.frequency)
+    osc.connect(filter)
+    osc.start(t)
+    osc.stop(t + dur + 0.2)
+  }
+}
+
+// "Da daaaa!": a short G, then a long, swelling C major chord.
+function playFanfare() {
+  if (!audioReady() || document.hidden) return
+  const G4 = 392, E4 = 329.63, C5 = 523.25
+  for (const freq of [G4, E4]) brass({ at: 0, freq, dur: 0.14, gain: 0.09 })
+  for (const freq of [C5, G4, E4]) brass({ at: 0.2, freq, dur: 1.15, gain: 0.09 })
+}

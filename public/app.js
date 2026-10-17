@@ -55,7 +55,10 @@ socket.on('state', (next) => {
   const prev = view
   view = next
   diff(prev, next)
-  if (prev?.phase !== 'showdown' && next.phase === 'showdown') ui.hideShowdown = false
+  if (prev?.phase !== 'showdown' && next.phase === 'showdown') {
+    ui.hideShowdown = false
+    if (prev && typeof playFanfare === 'function') playFanfare() // trumpets for the winner
+  }
   if (next.phase !== 'playing') ui.sel = null
   // Buzz the phone when it becomes your move.
   const myTurn = (v) => (v?.phase === 'playing' && v.players[v.game.turn]?.id === playerId) || (v?.phase === 'picking' && v.game.picker === playerId)
