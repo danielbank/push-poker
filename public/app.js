@@ -284,11 +284,12 @@ function renderTable(spectator) {
       <ul class="log">${[...view.log].reverse().map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
     </section>
     <section class="t-keys">
+      ${!spectator && view.phase === 'picking' ? `<p class="kbd-hint"><kbd>1</kbd>–<kbd>4</kbd> take a row</p>` : ''}
       ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
         <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
         <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
         <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
-      ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
+      ${!spectator && (view.phase === 'playing' || view.phase === 'picking') ? `<div class="footer-actions">
         <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
     </section>
     </aside>
