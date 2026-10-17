@@ -1,0 +1,19 @@
+{
+  "name": "push-poker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "while true; do node server.js; echo 'Server stopped; restarting in 1s (Ctrl+C twice to quit)'; sleep 1; done",
+    "fresh": "node server.js --fresh",
+    "test": "node --test",
+    "once": "node server.js"
+  },
+  "dependencies": {
+    "deck-of-cards": "^0.1.8",
+    "express": "^5.3.0",
+    "socket.io": "^4.8.4"
+  },
+  "license": "MIT",
+  "description": "Push 4 meets poker: a real-time card game for 2-4 players at the same table"
+}
