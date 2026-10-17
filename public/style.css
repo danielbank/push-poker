@@ -541,3 +541,20 @@ main:has(.table-layout) { max-width: 1280px; }
     padding-right: 4px;
   }
 }
+
+/* Lobby setting */
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+}
+.seg { display: inline-flex; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.2); flex: none; }
+.seg button { min-width: 48px; min-height: 40px; font-weight: 800; font-size: 18px; background: rgba(0, 0, 0, 0.25); }
+.seg button.on { background: var(--gold); color: #2a1a07; }
+.mini-backs { display: inline-flex; gap: 2px; }
+.hole { flex-wrap: wrap; }

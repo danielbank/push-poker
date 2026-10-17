@@ -25,7 +25,7 @@ const ui = {
   hideShowdown: false,
   abandonArmed: false,
   kbd: false,           // keyboard cursor visible (after an arrow key; hidden again on mouse/touch)
-  cursor: 2,            // keyboard cursor in your row: a card 0..4, or a + slot 0..5 while holding a hole card
+  cursor: 5,            // keyboard cursor in your row, in half-steps: even = + slot (s = p/2), odd = card (c = (p-1)/2)
 }
 
 function readJSON(key) { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
@@ -211,11 +211,18 @@ function playerList(canKick) {
 
 function renderLobby() {
   const n = view.players.length
+  const holes = view.settings.holeCards
   return `
     <section class="panel">
       <h2>${view.gameNumber ? `Game ${view.gameNumber + 1}` : 'Waiting for players'}</h2>
       <p class="muted" style="margin-bottom:12px">${n}/4 seated. Others join from this same URL.</p>
       ${playerList(true)}
+      <div class="setting">
+        <span><b>Hole cards</b><br><span class="muted">How many each player may hold</span></span>
+        <div class="seg" role="radiogroup" aria-label="Hole cards">
+          ${[1, 2].map((k) => `<button role="radio" aria-checked="${k === holes}" class="${k === holes ? 'on' : ''}" data-act="holeCards" data-n="${k}">${k}</button>`).join('')}
+        </div>
+      </div>
       <div class="row-btns">
         <button class="btn" data-act="start" ${n < 2 ? 'disabled' : ''}>${n < 2 ? 'Need 2+ players' : 'Deal!'}</button>
         <button class="btn ghost" data-act="leave">Leave table</button>
@@ -231,9 +238,9 @@ function rulesPanel() {
       Each player owns a row of 13 cards; 5 are in play. Make the best poker hand in your row.<br>
       <b>◀ ▶</b> Shift your row (it wraps).<br>
       <b>▲ ▼</b> Rotate a column through all four rows.<br>
-      <b>Tap a card</b> in your row to take it as your hole card, safe from everyone. Tap your hole card to put it back.<br>
+      <b>Tap a card</b> in your row to take it as a hole card, safe from everyone (up to ${view.settings.holeCards} at a time). Tap a hole card to put it back.<br>
       <b>Knock</b> once 5 full rounds are done: everyone, you included, gets one last move, then hands are compared
-      (your 5 in-play cards + hole card, best 5 count).
+      (your 5 in-play cards + hole cards, best 5 count).
     </div></details>`
 }
 
@@ -252,7 +259,7 @@ function renderTable(spectator) {
       <div class="scores">${view.players.map((q, i) => `
         <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
           ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
-          ${q.hasHole ? '<span class="mini-back" title="Holding a hole card"></span>' : ''}
+          ${q.holeCount ? `<span class="mini-backs" title="Holding ${q.holeCount} hole card${q.holeCount === 1 ? '' : 's'}">${'<span class="mini-back"></span>'.repeat(q.holeCount)}</span>` : ''}
           ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
         </div>`).join('')}
       </div>
@@ -300,12 +307,12 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const isMine = row.owner === playerId
   const result = (view.phase === 'showdown' && view.game.result?.hands.find((h) => h.playerId === row.owner)) || null
   const sel = ui.sel
-  const canPick = myActiveRow && !me().hasHole && !sel
+  const canPick = myActiveRow && canPickMore() && !sel
   const kbdOn = ui.kbd && myActiveRow && !sel
   const label = owner
     ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
        ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
-       ${isMine && me().hasHole && view.game.yourHand && view.game.yourHand !== row.hand ? `<span class="hand secret" title="Your real hand, counting your hole card. Only you can see this."><span class="mini-back"></span>${view.game.yourHand}</span>` : ''}
+       ${isMine && me().holeCount && view.game.yourHand && view.game.yourHand !== row.hand ? `<span class="hand secret" title="Your real hand, counting your hole cards. Only you can see this."><span class="mini-back"></span>${view.game.yourHand}</span>` : ''}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
     : `<span class="grow neutral">Neutral row</span>`
   const arrows = myActiveRow && !sel
@@ -318,7 +325,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
       ui.flashCol === c ? 'col-flash' : '',
       canPick ? 'pickable' : '',
       sel?.kind === 'pick' && myActiveRow && sel.col === c ? 'selected' : '',
-      kbdOn && !me().hasHole && cursor() === c ? 'kbd-focus' : '',
+      kbdOn && cursorPos() === 2 * c + 1 ? 'kbd-focus' : '',
       result?.cards.includes(id) ? 'win' : '',
     ].join(' ')
     const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Take ${cardName(id)} as hole card"` : ''
@@ -326,9 +333,9 @@ function renderRow(row, r, myActiveRow, myTurn) {
   }).join('')
 
   // Insert markers between cards when putting a hole card back down.
-  const showSlots = myActiveRow && (sel?.kind === 'put' || (kbdOn && me().hasHole))
+  const showSlots = myActiveRow && (sel?.kind === 'put' || (kbdOn && me().holeCount > 0))
   const slots = showSlots
-    ? [0, 1, 2, 3, 4, 5].map((s) => `<button class="slot ${sel?.slot === s || (kbdOn && cursor() === s) ? 'on' : ''}" data-act="slot" data-slot="${s}"
+    ? [0, 1, 2, 3, 4, 5].map((s) => `<button class="slot ${sel?.slot === s || (kbdOn && cursorPos() === 2 * s) ? 'on' : ''}" data-act="slot" data-slot="${s}"
         style="left: calc(${s} * (var(--cw) + var(--gap)) - var(--gap) / 2 + ${s === 0 ? '6px' : s === 5 ? '-6px' : '0px'})" aria-label="Insert at position ${s + 1}">+</button>`).join('')
     : ''
 
@@ -340,13 +347,24 @@ function renderRow(row, r, myActiveRow, myTurn) {
 
 function renderMineBar(mine, p) {
   const g = view.game
-  const canPut = mine && p.hole !== null && !ui.sel
-  const holeCard = p.hole !== null
-    ? cardHTML(p.hole, canPut ? 'pickable' : ui.sel?.kind === 'put' ? 'selected' : '', canPut ? 'data-act="hole" role="button" tabindex="0" aria-label="Put your hole card down"' : '')
-    : cardHTML(null)
+  const max = view.settings.holeCards
+  const held = p.holes || []
+  const sel = ui.sel
+  // Hole cards are clickable to start putting one down, or to answer "which hole card?".
+  const choosing = sel?.kind === 'put' && sel.slot !== undefined && sel.hole === undefined
+  const canPut = mine && held.length && (!sel || choosing)
+  const slots = Array.from({ length: max }, (_, i) => {
+    if (held[i] === undefined) return cardHTML(null)
+    const cls = sel?.kind === 'put' && sel.hole === i ? 'selected' : canPut ? 'pickable' : ''
+    return cardHTML(held[i], cls, canPut ? `data-act="hole" data-hole="${i}" role="button" tabindex="0" aria-label="Put ${cardName(held[i])} down"` : '')
+  }).join('')
+  const word = max === 1 ? 'Hole card' : 'Hole cards'
+  const hint = held.length
+    ? (canPut ? 'Tap one to put it back' : 'Safe from shifts')
+    : mine ? 'Tap a card in your row<br>to pick one up' : 'None held'
   return `<div class="mine-bar">
-    <div class="hole">${holeCard}
-      <div class="label"><b>Hole card</b><br>${p.hole !== null ? (canPut ? 'Tap to put it back' : 'Safe from shifts') : mine ? 'Tap a card in your row<br>to pick one up' : 'None held'}</div>
+    <div class="hole">${slots}
+      <div class="label"><b>${word}</b><br>${hint}</div>
     </div>
     <div class="spacer"></div>
     ${view.phase === 'playing' && !g.knockedBy ? `<button class="btn danger knock" data-act="knock" ${mine && g.canKnock && !ui.sel ? '' : 'disabled'}>Knock</button>` : ''}
@@ -355,10 +373,11 @@ function renderMineBar(mine, p) {
 
 function renderPrompt() {
   const s = ui.sel
-  const p = me()
+  const held = me().holes || []
+  const keys = '<span class="keys"><kbd>←</kbd> <kbd>→</kbd></span>'
   if (s.kind === 'pick') {
     const id = view.rows.find((r) => r.owner === playerId).inPlay[s.col]
-    return `<div class="prompt"><p>Pick up ${cardName(id)} as your hole card. Which side fills the gap? <span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></p>
+    return `<div class="prompt"><p>Pick up ${cardName(id)} as a hole card. Which side fills the gap? ${keys}</p>
       <div class="row-btns">
         <button class="btn" data-act="pickFill" data-fill="left">◀ From the left</button>
         <button class="btn" data-act="pickFill" data-fill="right">From the right ▶</button>
@@ -366,10 +385,18 @@ function renderPrompt() {
       </div></div>`
   }
   if (s.slot === undefined) {
-    return `<div class="prompt"><p>Put ${cardName(p.hole)} back. Tap a <b style="color:var(--gold)">+</b> in your row to choose where it goes.</p>
+    return `<div class="prompt"><p>Put ${cardName(held[s.hole ?? 0])} back. Tap a <b style="color:var(--gold)">+</b> in your row to choose where it goes.</p>
       <div class="row-btns"><button class="btn ghost" data-act="cancel">Cancel</button></div></div>`
   }
-  return `<div class="prompt"><p>Six cards don't fit. Which end gets pushed out of play? <span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></p>
+  if (s.hole === undefined) {
+    return `<div class="prompt"><p>Which hole card goes there? ${keys}</p>
+      <div class="row-btns">
+        <button class="btn" data-act="pickHole" data-hole="0">◀ ${cardName(held[0])}</button>
+        <button class="btn" data-act="pickHole" data-hole="1">${cardName(held[1])} ▶</button>
+        <button class="btn ghost" data-act="cancel">Cancel</button>
+      </div></div>`
+  }
+  return `<div class="prompt"><p>Six cards don't fit. Which end gets pushed out of play? ${keys}</p>
     <div class="row-btns">
       <button class="btn" data-act="eject" data-dir="left">◀ Left end</button>
       <button class="btn" data-act="eject" data-dir="right">Right end ▶</button>
@@ -390,7 +417,7 @@ function renderShowdown() {
       return `<div class="result ${won ? 'won' : ''}" style="--pc:${q.color}">
         <div class="head">${avatar(q, 'sm')}<span style="flex:1">${esc(q.name)} · ${h.name}</span>${won ? '🏆' : ''}<span class="muted">${q.wins} win${q.wins === 1 ? '' : 's'}</span></div>
         <div class="cards">${h.cards.map((id) => cardHTML(id)).join('')}</div>
-        ${q.hole !== null ? `<div class="muted" style="margin-top:6px">Hole card: ${cardName(q.hole)}</div>` : ''}
+        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Hole card${q.holes.length === 1 ? '' : 's'}: ${q.holes.map(cardName).join(' ')}</div>` : ''}
       </div>`
     }).join('')}
     <div class="row-btns" style="justify-content:center">
@@ -428,10 +455,22 @@ $app.addEventListener('keydown', (e) => {
  *   Shift + Enter  knock
  *   While choosing a side: ← → choose, Esc cancels
  */
-const holding = () => me()?.hasHole === true
-const cursor = () => Math.min(ui.cursor, holding() ? 5 : 4)
+const holeCount = () => me()?.holeCount ?? 0
+const canPickMore = () => holeCount() < view.settings.holeCards
+// The cursor walks half-steps along your row: + slots (even) only while holding a hole card,
+// cards (odd) only while you still have room to pick one up.
+const cursorValid = (p) => (p % 2 === 0 ? holeCount() > 0 : canPickMore())
+function cursorPos() {
+  if (cursorValid(ui.cursor)) return ui.cursor
+  for (let d = 1; d <= 10; d++) for (const p of [ui.cursor - d, ui.cursor + d]) if (p >= 0 && p <= 10 && cursorValid(p)) return p
+  return 5
+}
+function stepCursor(dir) {
+  for (let p = cursorPos() + dir; p >= 0 && p <= 10; p += dir) if (cursorValid(p)) return p
+  return cursorPos()
+}
 // The column Shift+↑↓ acts on: the card under the cursor, or the card right of the focused + (the last + uses the last card).
-const cursorColumn = () => Math.min(cursor(), 4)
+const cursorColumn = () => Math.min(Math.floor(cursorPos() / 2), 4)
 const kbdColumn = (mine) => (ui.kbd && mine && !ui.sel ? cursorColumn() : -1)
 
 document.addEventListener('pointerdown', () => { ui.kbd = false })
@@ -444,9 +483,14 @@ document.addEventListener('keydown', (e) => {
   const vertical = key === 'ArrowUp' ? 'up' : key === 'ArrowDown' ? 'down' : null
   const sel = ui.sel
 
-  // A pick-up or put-down choice is open: arrows choose the side.
+  // A pick-up or put-down choice is open: arrows choose the side (or which hole card).
   if (sel && (sel.kind === 'pick' || sel.slot !== undefined)) {
-    if (side) { e.preventDefault(); return sel.kind === 'pick' ? act('pickFill', { fill: side }) : act('eject', { dir: side }) }
+    if (side) {
+      e.preventDefault()
+      if (sel.kind === 'pick') return act('pickFill', { fill: side })
+      if (sel.hole === undefined) return act('pickHole', { hole: side === 'left' ? 0 : 1 })
+      return act('eject', { dir: side })
+    }
     if (key === 'Escape') { e.preventDefault(); return act('cancel') }
     return
   }
@@ -461,7 +505,7 @@ document.addEventListener('keydown', (e) => {
 
   if (side) {
     e.preventDefault()
-    ui.cursor = Math.max(0, Math.min(cursor() + (side === 'left' ? -1 : 1), holding() ? 5 : 4))
+    ui.cursor = stepCursor(side === 'left' ? -1 : 1)
     ui.kbd = true
     return render()
   }
@@ -469,7 +513,8 @@ document.addEventListener('keydown', (e) => {
   if ((key === 'Enter' || key === ' ') && ui.kbd && !e.target.closest('button, [data-act]')) {
     e.preventDefault()
     if (view.players[view.game.turn]?.id !== playerId) return toast(`It is ${view.players[view.game.turn].name}'s move`)
-    return holding() ? act('slot', { slot: cursor() }) : act('pick', { col: cursor() })
+    const pos = cursorPos()
+    return pos % 2 === 0 ? act('slot', { slot: pos / 2 }) : act('pick', { col: (pos - 1) / 2 })
   }
 })
 
@@ -505,18 +550,32 @@ async function act(name, d) {
     case 'knock': return move({ type: 'knock' })
     case 'pick': ui.sel = { kind: 'pick', col: Number(d.col) }; return render()
     case 'pickFill': return move({ type: 'pickUp', col: ui.sel.col, fill: d.fill })
-    case 'hole': ui.sel = { kind: 'put' }; return render()
+    // Putting down needs three answers, gathered in whatever order the player gives them:
+    // which hole card (tap it, or asked after choosing a +), where (a +), and which end leaves play.
+    case 'hole':
+      if (ui.sel?.kind === 'put' && ui.sel.slot !== undefined) ui.sel.hole = Number(d.hole)
+      else ui.sel = { kind: 'put', hole: Number(d.hole) }
+      return continuePutDown()
     case 'slot': {
-      const slot = Number(d.slot)
-      // At either end only the far end can be pushed out, so there's nothing to ask.
-      if (slot === 0) return move({ type: 'putDown', slot, eject: 'right' })
-      if (slot === 5) return move({ type: 'putDown', slot, eject: 'left' })
-      ui.sel = { kind: 'put', slot }
-      return render()
+      const hole = ui.sel?.kind === 'put' ? ui.sel.hole : undefined
+      ui.sel = { kind: 'put', hole: hole ?? (holeCount() === 1 ? 0 : undefined), slot: Number(d.slot) }
+      return continuePutDown()
     }
-    case 'eject': return move({ type: 'putDown', slot: ui.sel.slot, eject: d.dir })
+    case 'pickHole': ui.sel.hole = Number(d.hole); return continuePutDown()
+    case 'eject': return move({ type: 'putDown', hole: ui.sel.hole, slot: ui.sel.slot, eject: d.dir })
+    case 'holeCards': return send('settings', { holeCards: Number(d.n) })
     case 'cancel': ui.sel = null; return render()
   }
+}
+
+function continuePutDown() {
+  const { hole, slot } = ui.sel
+  if (hole !== undefined && slot !== undefined) {
+    // At either end only the far end can be pushed out, so there's nothing to ask.
+    if (slot === 0) return move({ type: 'putDown', hole, slot, eject: 'right' })
+    if (slot === 5) return move({ type: 'putDown', hole, slot, eject: 'left' })
+  }
+  render()
 }
 
 async function move(m) {

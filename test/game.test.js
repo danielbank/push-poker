@@ -45,20 +45,20 @@ test('pick up and put down keep five in play', () => {
   const { s, players } = table()
   const [a, b] = players
   G.applyMove(s, a.id, { type: 'pickUp', col: 1, fill: 'right' })
-  assert.equal(a.hole, 1)
+  assert.deepEqual(a.holes, [1])
   assert.deepEqual(s.rows[0].cards.slice(0, 5), [0, 2, 3, 4, 5])
   assert.equal(s.rows[0].cards.length, 12)
   G.applyMove(s, b.id, { type: 'pickUp', col: 0, fill: 'left' })
   assert.deepEqual(s.rows[1].cards.slice(0, 5), [25, 14, 15, 16, 17])
   // Hole cards are safe from column shifts.
   G.applyMove(s, a.id, { type: 'shiftCol', col: 0, dir: 'down' })
-  assert.equal(a.hole, 1)
+  assert.deepEqual(a.holes, [1])
   G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
   assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }), /already hold/)
   // Insert before slot 2, push out the left end.
   const before = s.rows[0].cards.slice(0, 5)
   G.applyMove(s, a.id, { type: 'putDown', slot: 2, eject: 'left' })
-  assert.equal(a.hole, null)
+  assert.deepEqual(a.holes, [])
   assert.deepEqual(s.rows[0].cards.slice(0, 5), [before[1], 1, before[2], before[3], before[4]])
   assert.equal(s.rows[0].cards.length, 13)
 })
@@ -105,10 +105,10 @@ test('views hide other hole cards and out-of-play cards', () => {
   const { s, players } = table()
   G.applyMove(s, players[0].id, { type: 'pickUp', col: 0, fill: 'right' })
   const v = G.viewFor(s, players[1].id, new Set())
-  assert.equal(v.players[0].hole, null)
-  assert.equal(v.players[0].hasHole, true)
+  assert.equal(v.players[0].holes, null)
+  assert.equal(v.players[0].holeCount, 1)
   assert.equal(v.rows[0].inPlay.length, 5)
-  assert.equal(G.viewFor(s, players[0].id, new Set()).players[0].hole, 0)
+  assert.deepEqual(G.viewFor(s, players[0].id, new Set()).players[0].holes, [0])
 })
 
 test('spectator view with neutral rows does not throw', () => {
@@ -125,7 +125,7 @@ test('putting the hole card down at an end cannot push it straight back out', ()
   assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', slot: 5, eject: 'right' }), /straight out of play/)
   G.applyMove(s, a.id, { type: 'putDown', slot: 0, eject: 'right' })
   assert.equal(s.rows[0].cards[0], 0)
-  assert.equal(a.hole, null)
+  assert.deepEqual(a.holes, [])
 })
 
 test('table hands and leaders use in-play cards only', () => {
@@ -144,4 +144,44 @@ test('table hands and leaders use in-play cards only', () => {
   v = G.viewFor(s, b.id, new Set())
   assert.equal(v.rows[0].hand, 'Flush')
   assert.equal(G.viewFor(s, a.id, new Set()).game.yourHand, 'Straight Flush')
+})
+
+test('with 2 hole cards you can hold two, choose which to put down, and use both in your hand', () => {
+  const s = G.createState()
+  const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
+  G.setHoleCards(s, 2)
+  G.startGame(s)
+  s.rows.forEach((row, r) => { row.cards = Array.from({ length: 13 }, (_, i) => r * 13 + i) })
+  const pass = () => G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }) // A♠
+  pass()
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }) // 2♠
+  assert.deepEqual(a.holes, [0, 1])
+  assert.equal(s.rows[0].cards.length, 11)
+  pass()
+  assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }), /already hold 2/)
+  // Best 5 of 7: in play 3-4-5-6-7♠ plus A♠ 2♠ hole cards.
+  assert.equal(G.handFor(s, a).name, 'Straight Flush')
+
+  // Put down the second hole card (2♠) at slot 1.
+  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', hole: 2, slot: 1, eject: 'right' }), /which hole card/)
+  G.applyMove(s, a.id, { type: 'putDown', hole: 1, slot: 1, eject: 'right' })
+  assert.deepEqual(a.holes, [0])
+  assert.equal(s.rows[0].cards[1], 1)
+  assert.equal(s.rows[0].cards.length, 12)
+})
+
+test('hole card setting only changes between games and survives old saves', () => {
+  const s = G.createState()
+  G.addPlayer(s, { name: 'A' })
+  G.addPlayer(s, { name: 'B' })
+  assert.throws(() => G.setHoleCards(s, 3), /1 or 2/)
+  G.startGame(s)
+  assert.throws(() => G.setHoleCards(s, 2), /between games/)
+  // A save from before this feature: no settings, single nullable hole.
+  const old = { phase: 'lobby', players: [{ id: 'x', hole: 7 }, { id: 'y', hole: null }], rows: [], game: null, gameNumber: 0, log: [] }
+  const fixed = G.normalizeState(old)
+  assert.equal(fixed.settings.holeCards, 1)
+  assert.deepEqual(fixed.players.map((p) => p.holes), [[7], []])
 })
