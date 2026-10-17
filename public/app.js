@@ -118,6 +118,7 @@ function textOn(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
   return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#1a1a1a' : '#fff'
 }
+const leading = (id) => view.phase === 'playing' && view.game?.leaders?.includes(id)
 const cardName = (id) => `${RANKS[(id % 13) + 1]}${SUITS[(id / 13) | 0]}`
 
 function cardHTML(id, cls = '', attrs = '') {
@@ -246,7 +247,7 @@ function renderTable(spectator) {
   return `
     <div class="scores">${view.players.map((q, i) => `
       <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
-        ${avatar(q, 'sm')}<span>${esc(q.name)}</span><span class="wins">${q.wins}</span>
+        ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
         ${q.hasHole ? '<span class="mini-back" title="Holding a hole card"></span>' : ''}
         ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
       </div>`).join('')}
@@ -292,8 +293,9 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const canPick = myActiveRow && !me().hasHole && !sel
   const kbdOn = ui.kbd && myActiveRow && !sel
   const label = owner
-    ? `${avatar(owner, 'sm')}<span class="grow">${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
-       ${isMine && view.game.yourHand ? `<span class="hand">${view.game.yourHand}</span>` : ''}
+    ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
+       ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
+       ${isMine && me().hasHole && view.game.yourHand && view.game.yourHand !== row.hand ? `<span class="hand secret" title="Your real hand, counting your hole card. Only you can see this."><span class="mini-back"></span>${view.game.yourHand}</span>` : ''}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
     : `<span class="grow neutral">Neutral row</span>`
   const arrows = myActiveRow && !sel

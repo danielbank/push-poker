@@ -43,6 +43,10 @@ On your turn you make exactly one move:
 - **Put your hole card down.** Tap your hole card, tap a **+** to choose where it goes in your row, then choose which end card gets pushed out of play. If you put it at the very start or end of the row, the card at the other end is pushed out automatically, so your hole card can never go straight back out of play.
 - **Knock.** Allowed once 5 full rounds are done (every player has moved 5 times). Knocking uses up your move. Every other player then gets one last move, and then the hands are compared.
 
+### Reading the table
+
+Every player's row is labelled with the best hand showing in their 5 in-play cards, and 👑 marks whoever is leading. Both are worked out from the cards on the table only, so they never give away a hole card. While you hold a hole card that improves your hand, your own row also shows your real hand next to a card-back icon. Only you can see that label.
+
 ### Keyboard shortcuts
 
 On a computer you can play without the mouse:

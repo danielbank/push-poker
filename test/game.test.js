@@ -124,3 +124,21 @@ test('putting the hole card down at an end cannot push it straight back out', ()
   assert.equal(s.rows[0].cards[0], 0)
   assert.equal(a.hole, null)
 })
+
+test('table hands and leaders use in-play cards only', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  // Row 0: A-2-3-4-5 of spades (straight flush). Row 1: plain high card.
+  s.rows[0].cards = [0, 1, 2, 3, 4, ...s.rows[0].cards.slice(5)]
+  s.rows[1].cards = [13, 15, 30, 44, 8, ...s.rows[1].cards.slice(5)] // A♥ 3♥ 5♣ 6♦ 9♠
+  let v = G.viewFor(s, b.id, new Set())
+  assert.equal(v.rows[0].hand, 'Straight Flush')
+  assert.deepEqual(v.game.leaders, [a.id])
+  assert.equal(v.rows[1].hand, 'High Card')
+  assert.equal(v.rows[2].hand, null) // neutral rows have no hand
+  // Picking up a hole card changes the public hand but the hole card stays hidden from it.
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }) // K♠ wraps in: K-2-3-4-5 of spades
+  v = G.viewFor(s, b.id, new Set())
+  assert.equal(v.rows[0].hand, 'Flush')
+  assert.equal(G.viewFor(s, a.id, new Set()).game.yourHand, 'Straight Flush')
+})
