@@ -55,6 +55,7 @@ const io = new Server(http, {
 
 // playerId -> Set of socket ids. A player is online if any of their sockets is connected.
 const sockets = new Map()
+const lastSlap = new Map() // playerId -> time of their last slap, to stop spamming
 const onlineIds = () => new Set([...sockets].filter(([, s]) => s.size).map(([id]) => id))
 
 function broadcast() {
@@ -142,6 +143,18 @@ io.on('connection', (socket) => {
     me()
     if (state.phase === 'showdown') G.backToLobby(state)
     G.startGame(state)
+  })
+
+  // Easter egg: relay a slap to everyone else. Purely cosmetic; never touches game state.
+  socket.on('slap', () => {
+    const p = state.players.find((x) => x.id === socket.data.playerId)
+    if (!p) return
+    const now = Date.now()
+    if (now - (lastSlap.get(p.id) || 0) < 1500) return
+    lastSlap.set(p.id, now)
+    for (const s of io.sockets.sockets.values()) {
+      if (s.data.playerId !== p.id) s.emit('slap', { name: p.name, color: p.color })
+    }
   })
 
   socket.on('disconnect', () => {
