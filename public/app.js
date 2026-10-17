@@ -232,7 +232,7 @@ function rulesPanel() {
       <b>◀ ▶</b> Shift your row (it wraps).<br>
       <b>▲ ▼</b> Rotate a column through all four rows.<br>
       <b>Tap a card</b> in your row to take it as your hole card, safe from everyone. Tap your hole card to put it back.<br>
-      <b>Knock</b> once 5 full rounds are done: everyone else gets one last move, then hands are compared
+      <b>Knock</b> once 5 full rounds are done: everyone, you included, gets one last move, then hands are compared
       (your 5 in-play cards + hole card, best 5 count).
     </div></details>`
 }

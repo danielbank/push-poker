@@ -68,7 +68,7 @@ test('turn order is enforced', () => {
   assert.throws(() => G.applyMove(s, players[1].id, { type: 'shiftRow', dir: 'left' }), /P0's move/)
 })
 
-test('knock unlocks after 5 rounds; everyone else gets one more move, then showdown', () => {
+test('knock unlocks after 5 rounds; everyone, knocker included, gets one more move, then showdown', () => {
   const { s, players } = table(3)
   const move = (p) => G.applyMove(s, p.id, { type: 'shiftRow', dir: 'left' })
   for (let i = 0; i < 14; i++) move(players[i % 3])
@@ -80,6 +80,9 @@ test('knock unlocks after 5 rounds; everyone else gets one more move, then showd
   move(players[1])
   assert.throws(() => G.applyMove(s, players[2].id, { type: 'knock' }), /already knocked/)
   move(players[2])
+  assert.equal(s.phase, 'playing')
+  assert.equal(s.game.finalMovesLeft, 1)
+  move(players[0]) // the knocker's last move
   assert.equal(s.phase, 'showdown')
   const winners = s.game.result.winners
   assert.ok(winners.length >= 1)
