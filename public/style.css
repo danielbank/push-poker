@@ -248,7 +248,7 @@ main {
   align-items: center;
   gap: 8px;
   padding: 0 6px 6px;
-  min-height: 34px;
+  height: 40px; /* fixed, so the row arrows appearing on your turn don't shift the board */
   font-size: 14px;
   font-weight: 600;
 }
@@ -295,9 +295,7 @@ main {
 .card.pickable { cursor: pointer; }
 .card.pickable:hover { transform: translateY(-4px); }
 .card.selected { transform: translateY(-10px); box-shadow: 0 0 0 3px var(--gold), 0 8px 14px rgba(0, 0, 0, 0.5); }
-.card.changed { animation: deal 0.45s ease-out; }
 .card.win { box-shadow: 0 0 0 3px var(--gold), 0 0 16px var(--gold); }
-@keyframes deal { from { transform: translateY(-14px) rotateY(80deg); opacity: 0.3; } }
 .col-flash { animation: colflash 1.2s ease-out; }
 @keyframes colflash { from { box-shadow: 0 0 0 3px var(--gold), 0 2px 4px rgba(0, 0, 0, 0.45); } }
 

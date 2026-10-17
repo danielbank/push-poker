@@ -19,7 +19,7 @@ const ui = {
   name: saved.name || '',
   color: saved.color || COLORS[Math.floor(Math.random() * 6)],
   sel: null,            // {kind:'pick', col} | {kind:'put', slot?}
-  changed: new Set(),   // "row:col" cards that changed in the latest update (animated once)
+  motion: null,         // what the latest state update did, for animating it once: {move} or {deal}
   flashRow: null,
   flashCol: null,
   hideShowdown: false,
@@ -90,14 +90,14 @@ function toast(msg) {
 }
 
 function diff(prev, next) {
-  ui.changed = new Set()
+  ui.motion = null
   ui.flashRow = ui.flashCol = null
-  if (!prev || prev.phase !== 'playing' || next.phase !== 'playing' || prev.gameNumber !== next.gameNumber) return
-  next.rows.forEach((row, r) => row.inPlay.forEach((id, c) => {
-    if (prev.rows[r]?.inPlay[c] !== id) ui.changed.add(`${r}:${c}`)
-  }))
+  if (next.phase !== 'playing') return
+  if (prev && (prev.phase !== 'playing' || prev.gameNumber !== next.gameNumber)) { ui.motion = { deal: true }; return }
+  if (!prev) return
   const lm = next.game.lastMove
   if (lm && next.game.movesMade !== prev.game.movesMade) {
+    ui.motion = { move: lm }
     if (lm.type === 'shiftCol') ui.flashCol = lm.col
     else ui.flashRow = next.rows.findIndex((r) => r.owner === lm.playerId)
   }
@@ -123,7 +123,7 @@ function cardHTML(id, cls = '', attrs = '') {
   const suit = (id / 13) | 0
   const rank = (id % 13) + 1
   const color = suit % 2 ? 'red' : 'black'
-  return `<div class="card ${color} ${cls}" ${attrs} title="${cardName(id)}">
+  return `<div class="card ${color} ${cls}" ${attrs} data-card="${id}" title="${cardName(id)}">
     <div class="face" style="background-image:url(/faces/${suit}_${rank}.svg)"></div>
     <div class="idx">${RANKS[rank]}</div><div class="idx br">${RANKS[rank]}</div>
   </div>`
@@ -140,15 +140,17 @@ function render() {
   if (!p) html = renderJoin() + (view.phase === 'lobby' ? renderLobbyList() : renderTable(true))
   else if (view.phase === 'lobby') html = renderLobby()
   else html = renderTable(false)
+  const before = snapshotCards()
   $app.innerHTML = html
   if (p && view.phase === 'showdown' && !ui.hideShowdown) $app.insertAdjacentHTML('beforeend', renderShowdown())
+  animateCards(before, ui.motion)
 
   // Keep typing focus across live re-renders.
   if (focusId) {
     const el = document.getElementById(focusId)
     if (el) { el.focus(); if (el.setSelectionRange) el.setSelectionRange(el.value.length, el.value.length) }
   }
-  ui.changed = new Set()
+  ui.motion = null
   ui.flashRow = ui.flashCol = null
 }
 
@@ -241,7 +243,7 @@ function renderTable(spectator) {
 
   return `
     <div class="scores">${view.players.map((q, i) => `
-      <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}">
+      <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
         ${avatar(q, 'sm')}<span>${esc(q.name)}</span><span class="wins">${q.wins}</span>
         ${q.hasHole ? '<span class="mini-back" title="Holding a hole card"></span>' : ''}
         ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
@@ -294,14 +296,13 @@ function renderRow(row, r, myActiveRow, myTurn) {
 
   const cards = row.inPlay.map((id, c) => {
     const cls = [
-      ui.changed.has(`${r}:${c}`) ? 'changed' : '',
       ui.flashCol === c ? 'col-flash' : '',
       canPick ? 'pickable' : '',
       sel?.kind === 'pick' && myActiveRow && sel.col === c ? 'selected' : '',
       result?.cards.includes(id) ? 'win' : '',
     ].join(' ')
     const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Take ${cardName(id)} as hole card"` : ''
-    return cardHTML(id, cls, attrs)
+    return cardHTML(id, cls, `${attrs} data-pos="${c}"`)
   }).join('')
 
   // Insert markers between cards when putting a hole card back down.
@@ -431,14 +432,158 @@ async function act(name, d) {
     case 'pick': ui.sel = { kind: 'pick', col: Number(d.col) }; return render()
     case 'pickFill': return move({ type: 'pickUp', col: ui.sel.col, fill: d.fill })
     case 'hole': ui.sel = { kind: 'put' }; return render()
-    case 'slot': ui.sel = { kind: 'put', slot: Number(d.slot) }; return render()
+    case 'slot': {
+      const slot = Number(d.slot)
+      // At either end only the far end can be pushed out, so there's nothing to ask.
+      if (slot === 0) return move({ type: 'putDown', slot, eject: 'right' })
+      if (slot === 5) return move({ type: 'putDown', slot, eject: 'left' })
+      ui.sel = { kind: 'put', slot }
+      return render()
+    }
     case 'eject': return move({ type: 'putDown', slot: ui.sel.slot, eject: d.dir })
     case 'cancel': ui.sel = null; return render()
   }
 }
 
 async function move(m) {
-  const ok = await send('move', m)
-  if (ok) ui.sel = null
-  render()
+  // Clear the prompt up front so the incoming state render doesn't need a second render
+  // (which would restart the card animations mid-flight).
+  const sel = ui.sel
+  ui.sel = null
+  if (!(await send('move', m))) { ui.sel = sel; render() }
+}
+
+/* ---------- Card animation ----------
+ * Every render, remember where each card was, then animate each card from its old spot to its new one
+ * (FLIP). Cards that enter or leave play slide in or out at the row's ends; another player's hidden
+ * hole card flies to or from their scoreboard chip; a new game deals cards out from the middle of the table.
+ * A render that interrupts an animation picks it up from the card's mid-flight position.
+ */
+
+const DURATION = 420
+const EASE = 'cubic-bezier(.2, .75, .25, 1)'
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
+const CARD_SELECTOR = '.board .card[data-card], .hole .card[data-card]'
+
+// Positions are stored relative to the board, so a banner above it changing height
+// doesn't make every card on the table twitch.
+const boardOrigin = () => {
+  const b = $app.querySelector('.board')?.getBoundingClientRect()
+  return b ? { x: b.left, y: b.top } : { x: 0, y: 0 }
+}
+
+function snapshotCards() {
+  const snap = new Map()
+  const o = boardOrigin()
+  for (const el of $app.querySelectorAll(CARD_SELECTOR)) {
+    const r = el.getBoundingClientRect()
+    snap.set(el.dataset.card, { x: r.left - o.x, y: r.top - o.y, width: r.width, height: r.height, html: el.outerHTML, pos: Number(el.dataset.pos ?? 2) })
+  }
+  return snap
+}
+
+const center = (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 })
+const chipRect = (pid) => $app.querySelector(`.score[data-pid="${pid}"]`)?.getBoundingClientRect()
+
+function animateCards(before, motion) {
+  // Hidden tabs (a phone with its screen off) don't run animations; don't queue up stale ones.
+  if (reducedMotion.matches || document.hidden) return
+  const els = [...$app.querySelectorAll(CARD_SELECTOR)]
+  const lm = motion?.move
+  const otherPlayersHole = lm && lm.playerId !== playerId
+  const o = boardOrigin()
+  // Turn a snapshot back into a viewport rect against the board's current position.
+  for (const old of before.values()) old.rect = { left: o.x + old.x, top: o.y + old.y, width: old.width, height: old.height }
+  const grid = $app.querySelector('.board .grid5')
+  const gap = grid ? parseFloat(getComputedStyle(grid).columnGap) || 8 : 8
+  const step = (r) => r.width + gap
+
+  // Cards that stayed in view: glide from where they were.
+  els.forEach((el, i) => {
+    const now = el.getBoundingClientRect()
+    const old = before.get(el.dataset.card)
+    if (old) {
+      const dx = old.rect.left - now.left
+      const dy = old.rect.top - now.top
+      const sx = old.rect.width / now.width
+      const sy = old.rect.height / now.height
+      if (Math.abs(dx) + Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01) return
+      lift(el, [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }])
+      return
+    }
+    if (motion?.deal) {
+      // Deal from the middle of the board, one card after another.
+      const board = $app.querySelector('.board')?.getBoundingClientRect()
+      if (!board) return
+      const from = center(board)
+      const to = center(now)
+      lift(el, [
+        { transform: `translate(${from.x - to.x}px, ${from.y - to.y}px) rotate(-12deg) scale(0.6)`, opacity: 0 },
+        { transform: 'none', opacity: 1 },
+      ], { delay: i * 28, fill: 'backwards', duration: 360, origin: 'center' })
+      return
+    }
+    if (!lm) return
+    if (lm.type === 'putDown' && otherPlayersHole && chipRect(lm.playerId)) {
+      // Their hidden hole card comes out of their scoreboard chip.
+      const from = center(chipRect(lm.playerId))
+      const to = center(now)
+      lift(el, [
+        { transform: `translate(${from.x - to.x}px, ${from.y - to.y}px) scale(0.25)`, opacity: 0.2 },
+        { transform: 'none', opacity: 1 },
+      ], { origin: 'center' })
+      return
+    }
+    // A card entering play slides in from the end of the row it comes from.
+    const dir = Number(el.dataset.pos ?? 2) >= 2 ? 1 : -1
+    lift(el, [{ transform: `translateX(${dir * step(now)}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }])
+  })
+
+  // Cards that left view: animate a ghost out of their old spot.
+  if (!lm) return
+  const nowIds = new Set(els.map((el) => el.dataset.card))
+  for (const [id, old] of before) {
+    if (nowIds.has(id)) continue
+    const ghost = makeGhost(old)
+    let to
+    if (lm.type === 'pickUp' && otherPlayersHole && chipRect(lm.playerId)) {
+      // Their new hole card disappears into their scoreboard chip.
+      const target = center(chipRect(lm.playerId))
+      const from = center(old.rect)
+      to = { transform: `translate(${target.x - from.x}px, ${target.y - from.y}px) scale(0.25)`, opacity: 0 }
+    } else {
+      const dir = old.pos >= 2 ? 1 : -1
+      to = { transform: `translateX(${dir * step(old.rect)}px)`, opacity: 0 }
+    }
+    ghost.animate([{ transform: 'none', opacity: 1 }, to], { duration: DURATION, easing: EASE }).onfinish = () => ghost.remove()
+  }
+}
+
+// Raise a card above its neighbours while it moves.
+function lift(el, keyframes, opts = {}) {
+  const { origin = '0 0', ...timing } = opts
+  el.style.transformOrigin = origin
+  el.style.zIndex = 3
+  const anim = el.animate(keyframes, { duration: DURATION, easing: EASE, ...timing })
+  anim.onfinish = anim.oncancel = () => { el.style.zIndex = '' }
+  return anim
+}
+
+function makeGhost(old) {
+  const wrap = document.createElement('div')
+  wrap.innerHTML = old.html
+  const ghost = wrap.firstElementChild
+  Object.assign(ghost.style, {
+    position: 'fixed',
+    left: `${old.rect.left}px`,
+    top: `${old.rect.top}px`,
+    width: `${old.rect.width}px`,
+    height: `${old.rect.height}px`,
+    margin: 0,
+    zIndex: 4,
+    pointerEvents: 'none',
+    transformOrigin: 'center',
+  })
+  document.body.appendChild(ghost)
+  return ghost
 }

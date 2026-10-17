@@ -152,6 +152,12 @@ io.on('connection', (socket) => {
   sendView(socket)
 })
 
+http.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') console.error(`Port ${PORT} is already in use. Is Push Poker already running? Try PORT=${PORT + 1} npm start`)
+  else console.error(e)
+  process.exit(1)
+})
+
 http.listen(PORT, () => {
   console.log(`Push Poker running at http://localhost:${PORT}`)
   console.log(`Share it with: ngrok http ${PORT}`)
