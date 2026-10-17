@@ -56,7 +56,7 @@ socket.on('state', (next) => {
   if (prev?.phase !== 'showdown' && next.phase === 'showdown') ui.hideShowdown = false
   if (next.phase !== 'playing') ui.sel = null
   // Buzz the phone when it becomes your move.
-  const myTurn = (v) => v?.phase === 'playing' && v.players[v.game.turn]?.id === playerId
+  const myTurn = (v) => (v?.phase === 'playing' && v.players[v.game.turn]?.id === playerId) || (v?.phase === 'picking' && v.game.picker === playerId)
   if (myTurn(next) && !myTurn(prev)) navigator.vibrate?.(150)
   render()
 })
@@ -94,9 +94,11 @@ function toast(msg) {
 function diff(prev, next) {
   ui.motion = null
   ui.flashRow = ui.flashCol = null
-  if (next.phase !== 'playing') return
-  if (prev && (prev.phase !== 'playing' || prev.gameNumber !== next.gameNumber)) { ui.motion = { deal: true }; return }
-  if (!prev) return
+  const live = (v) => v.phase === 'picking' || v.phase === 'playing'
+  if (!live(next)) return
+  // Cards are dealt when a game starts (into the row-picking phase).
+  if (prev && (!live(prev) || prev.gameNumber !== next.gameNumber)) { ui.motion = { deal: true }; return }
+  if (!prev || next.phase !== 'playing' || prev.phase !== 'playing') return
   const lm = next.game.lastMove
   if (lm && next.game.movesMade !== prev.game.movesMade) {
     ui.motion = { move: lm }
@@ -262,16 +264,19 @@ function renderTable(spectator) {
     <aside class="t-side">
     <section class="t-info">
       <div class="scores">${view.players.map((q, i) => `
-        <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
+        <div class="score ${(view.phase === 'playing' && i === g.turn) || (view.phase === 'picking' && q.id === g.picker) ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
           ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
           ${q.holeCount ? `<span class="mini-backs" title="Holding ${q.holeCount} hole card${q.holeCount === 1 ? '' : 's'}">${'<span class="mini-back"></span>'.repeat(q.holeCount)}</span>` : ''}
           ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
         </div>`).join('')}
       </div>
       ${renderStatus(mine, turnPlayer)}
-      ${view.phase === 'playing' && !turnPlayer.online && !spectator ? `
-        <div class="banner-off"><span class="grow">${esc(turnPlayer.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
-        <button class="btn small ghost" data-act="skip">Skip their move</button></div>` : ''}
+      ${(() => {
+        const waitingOn = view.phase === 'picking' ? player(g.picker) : view.phase === 'playing' ? turnPlayer : null
+        if (!waitingOn || waitingOn.online || spectator) return ''
+        return `<div class="banner-off"><span class="grow">${esc(waitingOn.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
+          <button class="btn small ghost" data-act="skip">${view.phase === 'picking' ? 'Pick a row for them' : 'Skip their move'}</button></div>`
+      })()}
     </section>
     <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
     <section class="t-log">
@@ -302,6 +307,12 @@ function renderTable(spectator) {
 function renderStatus(mine, turnPlayer) {
   const g = view.game
   if (view.phase === 'showdown') return `<div class="status">Showdown!</div>`
+  if (view.phase === 'picking') {
+    const picker = player(g.picker)
+    const order = g.pickOrder.map((id) => esc(player(id)?.name ?? '?')).join(' → ')
+    if (picker.id === playerId) return `<div class="status mine" style="--pc:${picker.color}; --on-pc:${textOn(picker.color)}">Choose your row!<span class="sub">Pick order: ${order}</span></div>`
+    return `<div class="status">${avatar(picker, 'sm').replace('<img', '<img style="vertical-align:middle;margin-right:6px;--pc:' + picker.color + '"')}${esc(picker.name)} is choosing a row…<span class="sub">Pick order: ${order}</span></div>`
+  }
   const knocker = g.knockedBy && player(g.knockedBy)
   const sub = knocker
     ? `${esc(knocker.name)} knocked · ${g.finalMovesLeft} final move${g.finalMovesLeft === 1 ? '' : 's'} left`
@@ -322,7 +333,11 @@ function renderRow(row, r, myActiveRow, myTurn) {
        ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
        ${isMine && me().holeCount && view.game.yourHand && view.game.yourHand !== row.hand ? `<span class="hand secret" title="Your real hand, counting your hole cards. Only you can see this."><span class="mini-back"></span>${view.game.yourHand}</span>` : ''}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
-    : `<span class="grow neutral">Neutral row</span>`
+    : view.phase === 'picking'
+      ? `<span class="grow neutral">Open row</span>
+         ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
+         ${view.game.picker === playerId ? `<button class="btn small take" data-act="pickRow" data-row="${r}">Take this row <kbd>${r + 1}</kbd></button>` : ''}`
+      : `<span class="grow neutral">Neutral row</span>`
   const arrows = myActiveRow && !sel
     ? `<button class="arrow" data-act="row" data-dir="left" aria-label="Shift your row left">◀</button>
        <button class="arrow" data-act="row" data-dir="right" aria-label="Shift your row right">▶</button>`
@@ -485,6 +500,12 @@ document.addEventListener('pointerdown', () => { ui.kbd = false })
 
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches('input, textarea, select')) return
+  // While picking rows, 1-4 takes that row.
+  if (view?.phase === 'picking' && me() && !e.shiftKey && /^[1-4]$/.test(e.key)) {
+    e.preventDefault()
+    if (view.game.picker !== playerId) return toast(`It is ${player(view.game.picker).name}'s pick`)
+    return act('pickRow', { row: Number(e.key) - 1 })
+  }
   if (!view || view.phase !== 'playing' || !me()) return
   const { key, shiftKey } = e
   const side = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : null
@@ -572,6 +593,7 @@ async function act(name, d) {
     case 'pickHole': ui.sel.hole = Number(d.hole); return continuePutDown()
     case 'eject': return move({ type: 'putDown', hole: ui.sel.hole, slot: ui.sel.slot, eject: d.dir })
     case 'holeCards': return send('settings', { holeCards: Number(d.n) })
+    case 'pickRow': return send('pickRow', { row: Number(d.row) })
     case 'cancel': ui.sel = null; return render()
   }
 }

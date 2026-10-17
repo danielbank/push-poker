@@ -27,9 +27,15 @@ Set `PORT` to change the port (default `3000`) and `STATE_FILE` to change where 
 
 ### The deal
 
-The whole deck is dealt into **4 rows of 13 cards**. Each player owns one row. With fewer than 4 players, the leftover rows are **neutral**: nobody plays them, but cards still pass through them.
+The whole deck is dealt into **4 rows of 13 cards**. Only **5 cards in each row are in play**, and those are the only ones anyone can see. The rest of the row sits out of play, in order, and wraps around like a loop.
 
-Only **5 cards in each row are in play**, and those are the only ones anyone can see. The rest of the row sits out of play, in order, and wraps around like a loop.
+### Choosing rows
+
+After the deal, every row's in-play cards are shown with the hand they make, and players take turns choosing a row. The player with the most wins picks first; if several players are tied for the lead, one of them is drawn at random. Picking then goes round-robin in seat order. Tap **Take this row**, or press <kbd>1</kbd>–<kbd>4</kbd> on a keyboard.
+
+With fewer than 4 players, the rows nobody takes are **neutral**: nobody plays them, but cards still pass through them. If the player whose pick it is goes offline, anyone can tap **Pick a row for them** to give them a random open row.
+
+Who moves first is separate from who picks first: it rotates around the table each game.
 
 Your goal is to have the best poker hand in your row when the game ends.
 

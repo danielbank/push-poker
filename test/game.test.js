@@ -7,10 +7,16 @@ import { bestHand } from '../lib/hands.js'
 const RANKS = { A: 1, J: 11, Q: 12, K: 13 }
 const c = (r, s) => 'shcd'.indexOf(s) * 13 + (RANKS[r] ?? Number(r)) - 1
 
+// Deal, then have each player take the row matching their seat (P0 -> row 0, ...).
+function deal(s) {
+  G.startGame(s)
+  for (const id of [...s.game.pickOrder]) G.pickRow(s, id, s.players.findIndex((p) => p.id === id))
+}
+
 function table(n = 2) {
   const s = G.createState()
   const players = Array.from({ length: n }, (_, i) => G.addPlayer(s, { name: `P${i}`, color: '#123456' }))
-  G.startGame(s)
+  deal(s)
   // Deterministic rows: row r holds ids r*13 .. r*13+12.
   s.rows.forEach((row, r) => { row.cards = Array.from({ length: 13 }, (_, i) => r * 13 + i) })
   return { s, players }
@@ -94,7 +100,7 @@ test('first player rotates each game and players can join between games', () => 
   assert.equal(s.game.turn, 0)
   G.abandonGame(s)
   G.addPlayer(s, { name: 'Late', color: '#000000' })
-  G.startGame(s)
+  deal(s)
   assert.equal(s.game.turn, 1)
   assert.equal(s.rows.filter((r) => r.owner).length, 3)
   assert.throws(() => G.addPlayer(s, { name: 'Later' }), /in progress/)
@@ -150,7 +156,7 @@ test('with 2 hole cards you can hold two, choose which to put down, and use both
   const s = G.createState()
   const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
   G.setHoleCards(s, 2)
-  G.startGame(s)
+  deal(s)
   s.rows.forEach((row, r) => { row.cards = Array.from({ length: 13 }, (_, i) => r * 13 + i) })
   const pass = () => G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
 
@@ -184,4 +190,55 @@ test('hole card setting only changes between games and survives old saves', () =
   const fixed = G.normalizeState(old)
   assert.equal(fixed.settings.holeCards, 1)
   assert.deepEqual(fixed.players.map((p) => p.holes), [[7], []])
+})
+
+test('players pick rows: most wins first, then round-robin; leftover rows stay neutral', () => {
+  const s = G.createState()
+  const [a, b, c] = ['A', 'B', 'C'].map((name) => G.addPlayer(s, { name }))
+  b.wins = 3
+  a.wins = 1
+  G.startGame(s)
+  assert.equal(s.phase, 'picking')
+  assert.ok(s.rows.every((r) => r.owner === null))
+  assert.deepEqual(s.game.pickOrder, [b.id, c.id, a.id])
+  // No moves until rows are chosen, and only the current picker may pick.
+  assert.throws(() => G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' }), /choose a row/)
+  assert.throws(() => G.pickRow(s, a.id, 0), /B's pick/)
+  G.pickRow(s, b.id, 2)
+  assert.throws(() => G.pickRow(s, c.id, 2), /belongs to B/)
+  G.pickRow(s, c.id, 0)
+  G.pickRow(s, a.id, 3)
+  assert.equal(s.phase, 'playing')
+  assert.deepEqual(s.rows.map((r) => r.owner), [c.id, null, b.id, a.id])
+  // The game plays on the chosen rows.
+  const mover = G.currentPlayer(s)
+  G.applyMove(s, mover.id, { type: 'shiftRow', dir: 'left' })
+})
+
+test('a tie for most wins is broken at random among the leaders only', () => {
+  const firsts = new Set()
+  for (let i = 0; i < 60; i++) {
+    const s = G.createState()
+    const [a, b, c] = ['A', 'B', 'C'].map((name) => G.addPlayer(s, { name }))
+    a.wins = 2
+    c.wins = 2
+    b.wins = 1
+    G.startGame(s)
+    firsts.add(G.getPlayer(s, s.game.pickOrder[0]).name)
+    // Round-robin from the first picker in seat order.
+    const seat = s.players.findIndex((p) => p.id === s.game.pickOrder[0])
+    assert.deepEqual(s.game.pickOrder, [0, 1, 2].map((k) => s.players[(seat + k) % 3].id))
+  }
+  assert.deepEqual([...firsts].sort(), ['A', 'C'])
+})
+
+test('an offline picker can be given a random open row', () => {
+  const s = G.createState()
+  G.addPlayer(s, { name: 'A' })
+  G.addPlayer(s, { name: 'B' })
+  G.startGame(s)
+  const picker = G.currentPicker(s)
+  G.pickRandomRow(s, picker.id)
+  assert.equal(s.rows.filter((r) => r.owner === picker.id).length, 1)
+  assert.equal(s.game.picks, 1)
 })
