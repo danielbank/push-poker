@@ -20,6 +20,8 @@ const ui = {
   color: saved.color || COLORS[Math.floor(Math.random() * 6)],
   sel: null,            // {kind:'pick', col} | {kind:'put', slot?}
   motion: null,         // what the latest state update did, for animating it once: {move} or {deal}
+  dealPending: null,    // card ids still hidden while a fancy deal plays (see deal.js)
+  dealing: false,       // a fancy deal is playing: the board shows bare felt
   flashRow: null,
   flashCol: null,
   hideShowdown: false,
@@ -140,6 +142,14 @@ function render() {
   if (!view) return
   const focusId = document.activeElement?.id
   const p = me()
+
+  // A fresh deal hides the board's cards until the deal routine lands each one (deal.js).
+  // This must be decided before the board's HTML is built, which reads these flags.
+  const fancyDeal = ui.motion?.deal && !reducedMotion.matches && !document.hidden && typeof dealShow === 'function'
+  if (fancyDeal) {
+    ui.dealPending = new Set(view.rows.flatMap((r) => r.inPlay).map(String))
+    ui.dealing = true // board labels and buttons stay hidden until the whole deal ends
+  }
 
   let html
   if (!p) html = renderJoin() + (view.phase === 'lobby' ? renderLobbyList() : renderTable(true))
@@ -294,7 +304,7 @@ function renderTable(spectator) {
     </section>
     </aside>
     <section class="t-board">
-      <div class="board">
+      <div class="board ${ui.dealing ? 'dealing' : ''}">
         ${colArrows('up', '▲')}
         ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
         ${colArrows('down', '▼')}
@@ -351,6 +361,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
       sel?.kind === 'pick' && myActiveRow && sel.col === c ? 'selected' : '',
       kbdOn && cursorPos() === 2 * c + 1 ? 'kbd-focus' : '',
       result?.cards.includes(id) ? 'win' : '',
+      ui.dealPending?.has(String(id)) ? 'deal-pending' : '',
     ].join(' ')
     const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Take ${cardName(id)} as hole card"` : ''
     return cardHTML(id, cls, `${attrs} data-pos="${c}"`)
@@ -652,6 +663,7 @@ const chipRect = (pid) => $app.querySelector(`.score[data-pid="${pid}"]`)?.getBo
 function animateCards(before, motion) {
   // Hidden tabs (a phone with its screen off) don't run animations; don't queue up stale ones.
   if (reducedMotion.matches || document.hidden) return
+  if (motion?.deal) return dealShow()
   const els = [...$app.querySelectorAll(CARD_SELECTOR)]
   const lm = motion?.move
   const otherPlayersHole = lm && lm.playerId !== playerId
@@ -673,18 +685,6 @@ function animateCards(before, motion) {
       const sy = old.rect.height / now.height
       if (Math.abs(dx) + Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01) return
       lift(el, [{ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` }, { transform: 'none' }])
-      return
-    }
-    if (motion?.deal) {
-      // Deal from the middle of the board, one card after another.
-      const board = $app.querySelector('.board')?.getBoundingClientRect()
-      if (!board) return
-      const from = center(board)
-      const to = center(now)
-      lift(el, [
-        { transform: `translate(${from.x - to.x}px, ${from.y - to.y}px) rotate(-12deg) scale(0.6)`, opacity: 0 },
-        { transform: 'none', opacity: 1 },
-      ], { delay: i * 28, fill: 'backwards', duration: 360, origin: 'center' })
       return
     }
     if (!lm) return

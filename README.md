@@ -27,7 +27,7 @@ Set `PORT` to change the port (default `3000`) and `STATE_FILE` to change where 
 
 ### The deal
 
-The whole deck is dealt into **4 rows of 13 cards**. Only **5 cards in each row are in play**, and those are the only ones anyone can see. The rest of the row sits out of play, in order, and wraps around like a loop.
+The whole deck is dealt into **4 rows of 13 cards**, with a randomly chosen flourish: a Solitaire-style slinky deal, a riffle shuffle, or an explosion. Tap or press any key to skip it. Only **5 cards in each row are in play**, and those are the only ones anyone can see. The rest of the row sits out of play, in order, and wraps around like a loop.
 
 ### Choosing rows
 

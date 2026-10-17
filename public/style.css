@@ -590,3 +590,20 @@ main:has(.table-layout) { max-width: 1280px; }
 .row-label .take { min-height: 30px; padding: 4px 10px; font-size: 13px; }
 .row-label .take kbd { margin-left: 4px; color: #2a1a07; background: rgba(255, 255, 255, 0.5); border-color: rgba(0, 0, 0, 0.25); }
 @media not ((hover: hover) and (pointer: fine)) { .row-label .take kbd { display: none; } }
+
+/* Fancy deals (deal.js) */
+.card.deal-pending { visibility: hidden; }
+.deal-layer { position: fixed; inset: 0; z-index: 40; pointer-events: none; overflow: hidden; }
+.deal-card {
+  position: fixed;
+  border-radius: 6px;
+  background: #fff url(/faces/back.png) center / 100% 100%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  will-change: transform;
+}
+.deal-flash { position: fixed; inset: 0; background: #fff; }
+
+/* While a deal plays, the board is bare felt: labels, hands and buttons fade in afterwards. */
+.board .row-label, .board .grid5 > .arrow { transition: opacity 0.35s ease; }
+.board.dealing .row-label, .board.dealing .grid5 > .arrow { visibility: hidden; opacity: 0; }
+.board.dealing .row { background: none; box-shadow: none; }
