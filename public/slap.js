@@ -1,5 +1,5 @@
 /* Easter egg: Shift+S slaps the table. Everyone else sees a giant hand swoop across their screen
- * with comic-book POW/BLAM bursts and hears a slap. Purely cosmetic; it never touches the game.
+ * with comic-book POW/BLAM bursts and hears a clap. Purely cosmetic; it never touches the game.
  * Relies on `socket` and `me` from app.js.
  */
 
@@ -62,7 +62,7 @@ function slapScreen() {
 
   const impact = SLAP_DURATION * IMPACT_AT
   setTimeout(() => {
-    playSlapSound()
+    playClapSound()
     shake()
   }, impact - 30)
 
@@ -140,45 +140,40 @@ function unlockAudio() {
 document.addEventListener('pointerdown', unlockAudio)
 document.addEventListener('keydown', unlockAudio)
 
-function playSlapSound() {
+// A hand clap: a few very short noise bursts ~10ms apart (the "flam" of skin meeting skin),
+// then a short airy tail, all band-passed into the clap's range.
+function playClapSound() {
   if (!audioCtx || audioCtx.state !== 'running') return
   const ctx = audioCtx
   const t = ctx.currentTime
-  // Master level: the layers sum to a peak of about 1.7, so this keeps the hit loud without clipping.
-  const out = ctx.createGain()
-  out.gain.value = 0.5
-  out.connect(ctx.destination)
 
-  // The crack: a burst of noise with a very fast decay, band-passed to sound like skin.
-  const crack = noise(ctx, 0.22, 5)
   const band = ctx.createBiquadFilter()
   band.type = 'bandpass'
-  band.frequency.value = 1700
-  band.Q.value = 0.7
-  crack.connect(band).connect(out)
-  crack.start(t)
+  band.frequency.value = 1200
+  band.Q.value = 1.1
+  const air = ctx.createBiquadFilter()
+  air.type = 'highpass'
+  air.frequency.value = 600
+  // Band-passing removes most of the noise's energy; this brings the clap back up to a peak of ~0.5-0.95.
+  const out = ctx.createGain()
+  out.gain.value = 1.7
+  band.connect(air).connect(out).connect(ctx.destination)
 
-  // The sting: a thinner, brighter layer on top.
-  const sting = noise(ctx, 0.08, 8)
-  const high = ctx.createBiquadFilter()
-  high.type = 'highpass'
-  high.frequency.value = 3500
-  const stingGain = ctx.createGain()
-  stingGain.gain.value = 0.5
-  sting.connect(high).connect(stingGain).connect(out)
-  sting.start(t)
+  // The flam: three quick bursts, the last one strongest.
+  ;[0, 0.011, 0.023].forEach((offset, i) => {
+    const burst = noise(ctx, 0.02, 3)
+    const g = ctx.createGain()
+    g.gain.value = [0.6, 0.75, 1][i]
+    burst.connect(g).connect(band)
+    burst.start(t + offset)
+  })
 
-  // The thump: a quick low sine drop for body.
-  const osc = ctx.createOscillator()
-  const thump = ctx.createGain()
-  osc.type = 'sine'
-  osc.frequency.setValueAtTime(170, t)
-  osc.frequency.exponentialRampToValueAtTime(45, t + 0.14)
-  thump.gain.setValueAtTime(0.9, t)
-  thump.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
-  osc.connect(thump).connect(out)
-  osc.start(t)
-  osc.stop(t + 0.2)
+  // The tail: a softer, longer decay that gives the clap its room.
+  const tail = noise(ctx, 0.18, 4)
+  const tg = ctx.createGain()
+  tg.gain.value = 0.55
+  tail.connect(tg).connect(band)
+  tail.start(t + 0.03)
 }
 
 // White noise with the decay envelope baked in.
