@@ -124,13 +124,22 @@ io.on('connection', (socket) => {
     for (const sid of sockets.get(id) || []) { const s = io.sockets.sockets.get(sid); if (s) s.data.playerId = null }
     sockets.delete(id)
   })
+  // Host-only actions: dealing, game mode, abandoning, returning to the lobby, removing players.
+  const host = () => { const id = me(); G.requireHost(state, id); return id }
   on('kick', ({ playerId }) => {
-    me()
+    host()
     if (onlineIds().has(playerId)) throw new G.GameError('Only offline players can be removed')
     G.removePlayer(state, playerId)
   })
-  on('start', () => { me(); G.startGame(state) })
-  on('settings', ({ holeCards }) => { me(); G.setHoleCards(state, Number(holeCards)) })
+  on('start', () => { host(); G.startGame(state) })
+  on('settings', ({ holeCards }) => { host(); G.setHoleCards(state, Number(holeCards)) })
+  on('makeHost', ({ playerId }) => { host(); G.setHost(state, playerId) })
+  // Anyone may take over hosting while the host is offline, so a dropped host can't stall the table.
+  on('claimHost', () => {
+    const id = me()
+    if (state.hostId && onlineIds().has(state.hostId)) throw new G.GameError('The host is still connected')
+    G.setHost(state, id)
+  })
   on('move', (move) => G.applyMove(state, me(), move))
   on('pickRow', ({ row }) => G.pickRow(state, me(), Number(row)))
   on('skip', () => {
@@ -140,10 +149,10 @@ io.on('connection', (socket) => {
     if (state.phase === 'picking') G.pickRandomRow(state, p.id)
     else G.applyMove(state, p.id, { type: 'pass' })
   })
-  on('abandon', () => { me(); G.abandonGame(state) })
-  on('lobby', () => { me(); G.backToLobby(state) })
+  on('abandon', () => { host(); G.abandonGame(state) })
+  on('lobby', () => { host(); G.backToLobby(state) })
   on('nextGame', () => {
-    me()
+    host()
     if (state.phase === 'showdown') G.backToLobby(state)
     G.startGame(state)
   })

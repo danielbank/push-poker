@@ -12,7 +12,11 @@ npm start            # serves http://localhost:3000
 ngrok http 3000      # in another terminal; share the https URL with the table
 ```
 
-Everyone opens the URL, picks a name and a color (the name generates their [DiceBear critter](https://www.dicebear.com/styles/critters/) avatar), and takes a seat. In the lobby, choose whether each player may hold **1 or 2 hole cards**. Once two or more players are seated, anyone can press **Deal!**.
+Everyone opens the URL, picks a name and a color (the name generates their [DiceBear critter](https://www.dicebear.com/styles/critters/) avatar), and takes a seat. Once two or more players are seated, the host presses **Deal!**.
+
+### The host
+
+The first player to join is the **host**, marked with a Host tag. Only the host can deal, choose whether each player may hold **1 or 2 hole cards**, abandon a game, return everyone to the lobby, and remove offline players, so a sore loser can't end a game early. The host can hand the job to someone else with **Make host** in the lobby. If the host leaves the table, hosting passes to the next player; if the host's connection drops, anyone else can tap **Become host** so the table never gets stuck.
 
 | Command | What it does |
 | --- | --- |
@@ -79,7 +83,7 @@ The game is built to cope with closed laptops, sleeping phones, and flaky Wi‑F
 - **Your seat belongs to you, not to your connection.** If you drop, your seat is held and you show as offline. The page reconnects by itself when you come back.
 - **Switching devices:** open the URL on the new device and tap your name under **Rejoin your seat**.
 - **Server restarts:** the table is saved to `game-state.json` after every change. `npm start` restarts the server automatically if it stops, and the game picks up exactly where it left off.
-- **Someone leaves for good:** other players can **Skip their move** while they are offline, or **Abandon game** (no winner). Offline players can be removed in the lobby.
+- **Someone leaves for good:** other players can **Skip their move** while they are offline, and the host can **Abandon game** (no winner) or remove offline players in the lobby. If the host is the one who left, anyone can **Become host** first.
 
 ## Testing on one machine
 

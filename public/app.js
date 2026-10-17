@@ -122,6 +122,12 @@ function textOn(hex) {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
   return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#1a1a1a' : '#fff'
 }
+const isHost = () => !!playerId && view.hostId === playerId
+const hostName = () => esc(player(view.hostId)?.name ?? 'the host')
+const hostTag = (id) => (id === view.hostId ? '<span class="host-tag" title="Deals, sets the game mode, and can abandon a game">Host</span>' : '')
+// Shown to non-hosts while the host is offline, so the table never gets stuck.
+const claimHostButton = () => (playerId && !isHost() && view.hostId && !player(view.hostId)?.online
+  ? `<button class="btn small ghost" data-act="claimHost">${hostName()} (host) is offline · Become host</button>` : '')
 const leading = (id) => view.phase === 'playing' && view.game?.leaders?.includes(id)
 const cardName = (id) => `${RANKS[(id % 13) + 1]}${SUITS[(id / 13) | 0]}`
 
@@ -213,15 +219,18 @@ function renderLobbyList() {
   return `<section class="panel"><h2>At the table</h2>${playerList(false)}</section>`
 }
 
-function playerList(canKick) {
+function playerList(manage) {
+  // The host can hand hosting to someone else and remove players who have gone offline.
+  const hosting = manage && isHost()
   return `<div class="players">${view.players.map((p) => `
     <div class="player" style="--pc:${p.color}">
       ${avatar(p)}
       <div class="grow">
-        <div class="name">${esc(p.name)}${p.id === playerId ? ' (you)' : ''}</div>
+        <div class="name">${esc(p.name)}${p.id === playerId ? ' (you)' : ''} ${hostTag(p.id)}</div>
         <div class="meta"><span class="dot ${p.online ? '' : 'off'}"></span>${p.online ? 'online' : 'offline'} · ${p.wins} win${p.wins === 1 ? '' : 's'}</div>
       </div>
-      ${canKick && !p.online ? `<button class="btn ghost small" data-act="kick" data-id="${p.id}">Remove</button>` : ''}
+      ${hosting && p.id !== playerId ? `<button class="btn ghost small" data-act="makeHost" data-id="${p.id}">Make host</button>` : ''}
+      ${hosting && !p.online ? `<button class="btn ghost small" data-act="kick" data-id="${p.id}">Remove</button>` : ''}
     </div>`).join('')}</div>`
 }
 
@@ -236,11 +245,14 @@ function renderLobby() {
       <div class="setting">
         <span><b>Hole cards</b><br><span class="muted">How many each player may hold</span></span>
         <div class="seg" role="radiogroup" aria-label="Hole cards">
-          ${[1, 2].map((k) => `<button role="radio" aria-checked="${k === holes}" class="${k === holes ? 'on' : ''}" data-act="holeCards" data-n="${k}">${k}</button>`).join('')}
+          ${[1, 2].map((k) => `<button role="radio" aria-checked="${k === holes}" class="${k === holes ? 'on' : ''}" data-act="holeCards" data-n="${k}" ${isHost() ? '' : `disabled title="Only the host can change this"`}>${k}</button>`).join('')}
         </div>
       </div>
       <div class="row-btns">
-        <button class="btn" data-act="start" ${n < 2 ? 'disabled' : ''}>${n < 2 ? 'Need 2+ players' : 'Deal!'}</button>
+        ${isHost()
+          ? `<button class="btn" data-act="start" ${n < 2 ? 'disabled' : ''}>${n < 2 ? 'Need 2+ players' : 'Deal!'}</button>`
+          : `<span class="waiting">Waiting for ${hostName()} (host) to deal</span>`}
+        ${claimHostButton()}
         <button class="btn ghost" data-act="leave">Leave table</button>
       </div>
     </section>
@@ -275,7 +287,7 @@ function renderTable(spectator) {
     <section class="t-info">
       <div class="scores">${view.players.map((q, i) => `
         <div class="score ${(view.phase === 'playing' && i === g.turn) || (view.phase === 'picking' && q.id === g.picker) ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
-          ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span><span class="wins">${q.wins}</span>
+          ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span>${hostTag(q.id)}<span class="wins">${q.wins}</span>
           ${q.holeCount ? `<span class="mini-backs" title="Holding ${q.holeCount} hole card${q.holeCount === 1 ? '' : 's'}">${'<span class="mini-back"></span>'.repeat(q.holeCount)}</span>` : ''}
           ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
         </div>`).join('')}
@@ -299,8 +311,9 @@ function renderTable(spectator) {
         <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
         <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
         <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
-      ${!spectator && (view.phase === 'playing' || view.phase === 'picking') ? `<div class="footer-actions">
+      ${!spectator && isHost() && (view.phase === 'playing' || view.phase === 'picking') ? `<div class="footer-actions">
         <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
+      ${!spectator && claimHostButton() ? `<div class="footer-actions">${claimHostButton()}</div>` : ''}
     </section>
     </aside>
     <section class="t-board">
@@ -456,9 +469,10 @@ function renderShowdown() {
       </div>`
     }).join('')}
     <div class="row-btns" style="justify-content:center">
-      <button class="btn" data-act="nextGame">Deal next game</button>
+      ${isHost() ? `<button class="btn" data-act="nextGame">Deal next game</button>` : `<span class="waiting">Waiting for ${hostName()} (host) to deal the next game</span>`}
       <button class="btn ghost" data-act="hideResults">View table</button>
-      <button class="btn ghost" data-act="lobby">Back to lobby</button>
+      ${isHost() ? `<button class="btn ghost" data-act="lobby">Back to lobby</button>` : ''}
+      ${claimHostButton()}
     </div>
   </div></div>`
 }
@@ -577,6 +591,8 @@ async function act(name, d) {
     case 'start': return send('start')
     case 'leave': return send('leave')
     case 'kick': return send('kick', { playerId: d.id })
+    case 'makeHost': return send('makeHost', { playerId: d.id })
+    case 'claimHost': return send('claimHost')
     case 'skip': return send('skip')
     case 'nextGame': return send('nextGame')
     case 'lobby': return send('lobby')

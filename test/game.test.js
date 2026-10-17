@@ -242,3 +242,21 @@ test('an offline picker can be given a random open row', () => {
   assert.equal(s.rows.filter((r) => r.owner === picker.id).length, 1)
   assert.equal(s.game.picks, 1)
 })
+
+test('the first player to join hosts; hosting passes on when the host leaves', () => {
+  const s = G.createState()
+  const a = G.addPlayer(s, { name: 'A' })
+  const b = G.addPlayer(s, { name: 'B' })
+  assert.equal(s.hostId, a.id)
+  assert.doesNotThrow(() => G.requireHost(s, a.id))
+  assert.throws(() => G.requireHost(s, b.id), /Only the host \(A\)/)
+  G.setHost(s, b.id)
+  assert.equal(s.hostId, b.id)
+  G.removePlayer(s, b.id)
+  assert.equal(s.hostId, a.id)
+  G.removePlayer(s, a.id)
+  assert.equal(s.hostId, null)
+  // A save from before hosts existed gets its first player as host.
+  const old = G.normalizeState({ phase: 'lobby', players: [{ id: 'x', holes: [] }, { id: 'y', holes: [] }], rows: [], game: null, gameNumber: 0, log: [] })
+  assert.equal(old.hostId, 'x')
+})
