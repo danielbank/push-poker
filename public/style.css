@@ -314,7 +314,7 @@ main {
   box-shadow: 0 0 10px var(--gold);
   z-index: 2;
 }
-.slot.on { background: #fff; box-shadow: 0 0 14px #fff; }
+.slot.on { background: #fff; box-shadow: 0 0 0 3px var(--gold), 0 0 18px #fff; width: 22px; margin-left: -11px; z-index: 3; }
 
 /* Your hand area */
 .mine-bar {
@@ -411,4 +411,26 @@ main {
 @media (max-width: 480px) {
   .row-label { font-size: 13px; }
   .showdown h2 { font-size: 24px; }
+}
+
+/* Keyboard */
+.card.kbd-focus { transform: translateY(-6px); box-shadow: 0 0 0 3px #fff, 0 0 16px rgba(255, 255, 255, 0.7); }
+.arrow.kbd-target { background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 0 0 2px var(--gold); }
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-bottom-width: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  font: 600 12px/1.4 Inter, system-ui, sans-serif;
+  text-align: center;
+  color: var(--ink);
+}
+.kbd-hint { margin-top: 14px; font-size: 12px; line-height: 2; color: var(--ink-dim); text-align: center; }
+.prompt .keys { margin-left: 6px; white-space: nowrap; }
+/* Only devices with a keyboard-and-mouse style pointer get the hints. */
+@media not ((hover: hover) and (pointer: fine)) {
+  .kbd-hint, .prompt .keys { display: none; }
 }

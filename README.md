@@ -43,6 +43,19 @@ On your turn you make exactly one move:
 - **Put your hole card down.** Tap your hole card, tap a **+** to choose where it goes in your row, then choose which end card gets pushed out of play. If you put it at the very start or end of the row, the card at the other end is pushed out automatically, so your hole card can never go straight back out of play.
 - **Knock.** Allowed once 5 full rounds are done (every player has moved 5 times). Knocking uses up your move. Every other player then gets one last move, and then the hands are compared.
 
+### Keyboard shortcuts
+
+On a computer you can play without the mouse:
+
+| Keys | Action |
+| --- | --- |
+| <kbd>←</kbd> <kbd>→</kbd> | Move the cursor along your row: over your cards, or over the **+** markers while you hold a hole card |
+| <kbd>Enter</kbd> | Pick up the card under the cursor, or put your hole card down at the focused **+** |
+| <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> | Shift your row |
+| <kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> | Shift the column under the cursor (its ▲ ▼ buttons light up) |
+| <kbd>Shift</kbd>+<kbd>Enter</kbd> | Knock |
+| <kbd>←</kbd> <kbd>→</kbd> / <kbd>Esc</kbd> | When asked which side fills the gap or which end gets pushed out: choose a side, or cancel |
+
 ### Showdown
 
 Your hand is the **best 5 cards** from your 5 in-play cards plus your hole card, if you have one. Standard poker rankings apply, from high card up to straight flush, and an ace can play high or low in a straight. The best hand wins the game. Tied players each get a win.

@@ -24,6 +24,8 @@ const ui = {
   flashCol: null,
   hideShowdown: false,
   abandonArmed: false,
+  kbd: false,           // keyboard cursor visible (after an arrow key; hidden again on mouse/touch)
+  cursor: 2,            // keyboard cursor in your row: a card 0..4, or a + slot 0..5 while holding a hole card
 }
 
 function readJSON(key) { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
@@ -254,12 +256,16 @@ function renderTable(spectator) {
       <div class="banner-off"><span class="grow">${esc(turnPlayer.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
       <button class="btn small ghost" data-act="skip">Skip their move</button></div>` : ''}
     <div class="board">
-      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow" data-act="col" data-col="${c}" data-dir="up" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} up">▲</button>`).join('')}</div>
+      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="up" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} up">▲</button>`).join('')}</div>
       ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
-      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow" data-act="col" data-col="${c}" data-dir="down" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} down">▼</button>`).join('')}</div>
+      <div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="down" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} down">▼</button>`).join('')}</div>
     </div>
     ${!spectator && p ? renderMineBar(mine, p) : ''}
     ${ui.sel ? renderPrompt() : ''}
+    ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
+      <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
+      <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
+      <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
     <ul class="log">${view.log.map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
     ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
       <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
@@ -284,6 +290,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const result = (view.phase === 'showdown' && view.game.result?.hands.find((h) => h.playerId === row.owner)) || null
   const sel = ui.sel
   const canPick = myActiveRow && !me().hasHole && !sel
+  const kbdOn = ui.kbd && myActiveRow && !sel
   const label = owner
     ? `${avatar(owner, 'sm')}<span class="grow">${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
        ${isMine && view.game.yourHand ? `<span class="hand">${view.game.yourHand}</span>` : ''}
@@ -299,6 +306,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
       ui.flashCol === c ? 'col-flash' : '',
       canPick ? 'pickable' : '',
       sel?.kind === 'pick' && myActiveRow && sel.col === c ? 'selected' : '',
+      kbdOn && !me().hasHole && cursor() === c ? 'kbd-focus' : '',
       result?.cards.includes(id) ? 'win' : '',
     ].join(' ')
     const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Take ${cardName(id)} as hole card"` : ''
@@ -306,8 +314,9 @@ function renderRow(row, r, myActiveRow, myTurn) {
   }).join('')
 
   // Insert markers between cards when putting a hole card back down.
-  const slots = myActiveRow && sel?.kind === 'put'
-    ? [0, 1, 2, 3, 4, 5].map((s) => `<button class="slot ${sel.slot === s ? 'on' : ''}" data-act="slot" data-slot="${s}"
+  const showSlots = myActiveRow && (sel?.kind === 'put' || (kbdOn && me().hasHole))
+  const slots = showSlots
+    ? [0, 1, 2, 3, 4, 5].map((s) => `<button class="slot ${sel?.slot === s || (kbdOn && cursor() === s) ? 'on' : ''}" data-act="slot" data-slot="${s}"
         style="left: calc(${s} * (var(--cw) + var(--gap)) - var(--gap) / 2 + ${s === 0 ? '6px' : s === 5 ? '-6px' : '0px'})" aria-label="Insert at position ${s + 1}">+</button>`).join('')
     : ''
 
@@ -337,7 +346,7 @@ function renderPrompt() {
   const p = me()
   if (s.kind === 'pick') {
     const id = view.rows.find((r) => r.owner === playerId).inPlay[s.col]
-    return `<div class="prompt"><p>Pick up ${cardName(id)} as your hole card. Which side fills the gap?</p>
+    return `<div class="prompt"><p>Pick up ${cardName(id)} as your hole card. Which side fills the gap? <span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></p>
       <div class="row-btns">
         <button class="btn" data-act="pickFill" data-fill="left">◀ From the left</button>
         <button class="btn" data-act="pickFill" data-fill="right">From the right ▶</button>
@@ -348,7 +357,7 @@ function renderPrompt() {
     return `<div class="prompt"><p>Put ${cardName(p.hole)} back. Tap a <b style="color:var(--gold)">+</b> in your row to choose where it goes.</p>
       <div class="row-btns"><button class="btn ghost" data-act="cancel">Cancel</button></div></div>`
   }
-  return `<div class="prompt"><p>Six cards don't fit. Which end gets pushed out of play?</p>
+  return `<div class="prompt"><p>Six cards don't fit. Which end gets pushed out of play? <span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></p>
     <div class="row-btns">
       <button class="btn" data-act="eject" data-dir="left">◀ Left end</button>
       <button class="btn" data-act="eject" data-dir="right">Right end ▶</button>
@@ -397,6 +406,59 @@ $app.addEventListener('input', (e) => {
 $app.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'name' && ui.name.trim()) act('join', {})
   else if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.card[data-act]')) { e.preventDefault(); e.target.click() }
+})
+
+/* Keyboard shortcuts (only on your own seat during a game):
+ *   ← →            move the cursor along your row (cards, or the + slots while holding a hole card)
+ *   Enter / Space  pick up the card under the cursor, or put your hole card down at the cursor's +
+ *   Shift + ← →    shift your row
+ *   Shift + ↑ ↓    shift the cursor's column
+ *   Shift + Enter  knock
+ *   While choosing a side: ← → choose, Esc cancels
+ */
+const holding = () => me()?.hasHole === true
+const cursor = () => Math.min(ui.cursor, holding() ? 5 : 4)
+// The column Shift+↑↓ acts on: the card under the cursor, or the card right of the focused + (the last + uses the last card).
+const cursorColumn = () => Math.min(cursor(), 4)
+const kbdColumn = (mine) => (ui.kbd && mine && !ui.sel ? cursorColumn() : -1)
+
+document.addEventListener('pointerdown', () => { ui.kbd = false })
+
+document.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey || e.target.matches('input, textarea, select')) return
+  if (!view || view.phase !== 'playing' || !me()) return
+  const { key, shiftKey } = e
+  const side = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : null
+  const vertical = key === 'ArrowUp' ? 'up' : key === 'ArrowDown' ? 'down' : null
+  const sel = ui.sel
+
+  // A pick-up or put-down choice is open: arrows choose the side.
+  if (sel && (sel.kind === 'pick' || sel.slot !== undefined)) {
+    if (side) { e.preventDefault(); return sel.kind === 'pick' ? act('pickFill', { fill: side }) : act('eject', { dir: side }) }
+    if (key === 'Escape') { e.preventDefault(); return act('cancel') }
+    return
+  }
+  if (key === 'Escape') { if (sel) { e.preventDefault(); act('cancel') } return }
+
+  if (shiftKey) {
+    if (side) { e.preventDefault(); return act('row', { dir: side }) }
+    if (vertical) { e.preventDefault(); ui.kbd = true; return act('col', { col: cursorColumn(), dir: vertical }) }
+    if (key === 'Enter') { e.preventDefault(); return act('knock') }
+    return
+  }
+
+  if (side) {
+    e.preventDefault()
+    ui.cursor = Math.max(0, Math.min(cursor() + (side === 'left' ? -1 : 1), holding() ? 5 : 4))
+    ui.kbd = true
+    return render()
+  }
+  // Let Enter/Space on a focused button do its own thing.
+  if ((key === 'Enter' || key === ' ') && ui.kbd && !e.target.closest('button, [data-act]')) {
+    e.preventDefault()
+    if (view.players[view.game.turn]?.id !== playerId) return toast(`It is ${view.players[view.game.turn].name}'s move`)
+    return holding() ? act('slot', { slot: cursor() }) : act('pick', { col: cursor() })
+  }
 })
 
 $app.addEventListener('click', (e) => {
