@@ -145,14 +145,14 @@ test('table hands and leaders use in-play cards only', () => {
   assert.deepEqual(v.game.leaders, [a.id])
   assert.equal(v.rows[1].hand, 'High Card')
   assert.equal(v.rows[2].hand, null) // neutral rows have no hand
-  // Picking up a hole card changes the public hand but the hole card stays hidden from it.
+  // Picking up a hole card changes the hand: the held card no longer counts.
   G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }) // K♠ wraps in: K-2-3-4-5 of spades
   v = G.viewFor(s, b.id, new Set())
   assert.equal(v.rows[0].hand, 'Flush')
-  assert.equal(G.viewFor(s, a.id, new Set()).game.yourHand, 'Straight Flush')
+  assert.equal(G.handFor(s, a).name, 'Flush')
 })
 
-test('with 2 hole cards you can hold two, choose which to put down, and use both in your hand', () => {
+test('with 2 hole cards you can hold two and choose which to put down', () => {
   const s = G.createState()
   const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
   G.setHoleCards(s, 2)
@@ -167,8 +167,6 @@ test('with 2 hole cards you can hold two, choose which to put down, and use both
   assert.equal(s.rows[0].cards.length, 11)
   pass()
   assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }), /already hold 2/)
-  // Best 5 of 7: in play 3-4-5-6-7♠ plus A♠ 2♠ hole cards.
-  assert.equal(G.handFor(s, a).name, 'Straight Flush')
 
   // Put down the second hole card (2♠) at slot 1.
   assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', hole: 2, slot: 1, eject: 'right' }), /which hole card/)
@@ -259,4 +257,26 @@ test('the first player to join hosts; hosting passes on when the host leaves', (
   // A save from before hosts existed gets its first player as host.
   const old = G.normalizeState({ phase: 'lobby', players: [{ id: 'x', holes: [] }, { id: 'y', holes: [] }], rows: [], game: null, gameNumber: 0, log: [] })
   assert.equal(old.hostId, 'x')
+})
+
+test('hole cards never count toward a hand, even at the showdown', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  // A's in-play cards: A♠ 2♥ 4♣ 7♦ 10♠ (high card). Holding A♥ would make a pair, but held cards don't count.
+  s.rows[0].cards = [0, 14, 29, 45, 9, ...s.rows[0].cards.slice(5).filter((c) => c !== 13)]
+  a.holes = [13]
+  assert.equal(G.handFor(s, a).name, 'High Card')
+
+  // Play to the showdown: 5 rounds, A knocks, then everyone's last move.
+  const turn = () => G.currentPlayer(s)
+  while (!G.canKnock(s)) G.applyMove(s, turn().id, { type: 'shiftRow', dir: 'left' })
+  G.applyMove(s, turn().id, { type: 'knock' })
+  while (s.phase !== 'showdown') G.applyMove(s, turn().id, { type: 'shiftRow', dir: 'left' })
+
+  for (const p of [a, b]) {
+    const scored = s.game.result.hands.find((h) => h.playerId === p.id)
+    const inPlay = s.rows.find((r) => r.owner === p.id).cards.slice(0, 5)
+    assert.deepEqual([...scored.cards].sort(), [...inPlay].sort())
+  }
+  assert.ok(!s.game.result.hands.find((h) => h.playerId === a.id).cards.includes(13))
 })

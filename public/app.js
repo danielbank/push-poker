@@ -270,9 +270,9 @@ function rulesPanel() {
       Each player owns a row of 13 cards; 5 are in play. Make the best poker hand in your row.<br>
       <b>◀ ▶</b> Shift your row (it wraps).<br>
       <b>▲ ▼</b> Rotate a column through all four rows.<br>
-      <b>Tap a card</b> in your row to take it as a hole card, safe from everyone (up to ${view.settings.holeCards} at a time). Tap a hole card to put it back.<br>
+      <b>Tap a card</b> in your row to take it as a hole card, safe from everyone (up to ${view.settings.holeCards} at a time). Tap a hole card to put it back. Hole cards don't count toward your hand until you put them back.<br>
       <b>Knock</b> once 5 full rounds are done: everyone, you included, gets one last move, then hands are compared
-      (your 5 in-play cards + hole cards, best 5 count).
+      (only the 5 cards in play in your row count).
     </div></details>`
 }
 
@@ -359,7 +359,6 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const label = owner
     ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
        ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
-       ${isMine && me().holeCount && view.game.yourHand && view.game.yourHand !== row.hand ? `<span class="hand secret" title="Your real hand, counting your hole cards. Only you can see this."><span class="mini-back"></span>${view.game.yourHand}</span>` : ''}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
     : view.phase === 'picking'
       ? `<span class="grow neutral">Open row</span>
@@ -411,8 +410,9 @@ function renderMineBar(mine, p) {
     return cardHTML(held[i], cls, canPut ? `data-act="hole" data-hole="${i}" role="button" tabindex="0" aria-label="Put ${cardName(held[i])} down"` : '')
   }).join('')
   const word = max === 1 ? 'Hole card' : 'Hole cards'
+  // Hole cards are safe but don't score, so remind the player to put them back before the showdown.
   const hint = held.length
-    ? (canPut ? 'Tap one to put it back' : 'Safe from shifts')
+    ? `${canPut ? 'Tap one to put it back' : 'Safe from shifts'}<br><span class="no-count">Not in your hand until put back</span>`
     : mine ? 'Tap a card in your row<br>to pick one up' : 'None held'
   return `<div class="mine-bar">
     <div class="hole">${slots}
@@ -469,7 +469,7 @@ function renderShowdown() {
       return `<div class="result ${won ? 'won' : ''}" style="--pc:${q.color}">
         <div class="head">${avatar(q, 'sm')}<span style="flex:1">${esc(q.name)} · ${h.name}</span>${won ? '🏆' : ''}<span class="muted">${q.wins} win${q.wins === 1 ? '' : 's'}</span></div>
         <div class="cards">${h.cards.map((id) => cardHTML(id)).join('')}</div>
-        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Hole card${q.holes.length === 1 ? '' : 's'}: ${q.holes.map(cardName).join(' ')}</div>` : ''}
+        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Still holding (not counted): ${q.holes.map(cardName).join(' ')}</div>` : ''}
       </div>`
     }).join('')}
     <div class="row-btns" style="justify-content:center">
