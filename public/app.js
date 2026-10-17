@@ -144,7 +144,11 @@ function render() {
   else if (view.phase === 'lobby') html = renderLobby()
   else html = renderTable(false)
   const before = snapshotCards()
+  const logScroll = $app.querySelector('.log')?.scrollTop
   $app.innerHTML = html
+  // Keep the game log where the reader left it.
+  const log = $app.querySelector('.log')
+  if (log && logScroll) log.scrollTop = logScroll
   if (p && view.phase === 'showdown' && !ui.hideShowdown) $app.insertAdjacentHTML('beforeend', renderShowdown())
   animateCards(before, ui.motion)
 
@@ -255,6 +259,7 @@ function renderTable(spectator) {
   // Two columns on wide screens: the board on the left (at least 2:1), and the scoreboard, status,
   // your hole card and the game log on the right. Narrow screens stack them in reading order.
   return `<div class="table-layout">
+    <aside class="t-side">
     <section class="t-info">
       <div class="scores">${view.players.map((q, i) => `
         <div class="score ${view.phase === 'playing' && i === g.turn ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
@@ -268,6 +273,20 @@ function renderTable(spectator) {
         <div class="banner-off"><span class="grow">${esc(turnPlayer.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
         <button class="btn small ghost" data-act="skip">Skip their move</button></div>` : ''}
     </section>
+    <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
+    <section class="t-log">
+      <h3>Game log</h3>
+      <ul class="log">${[...view.log].reverse().map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
+    </section>
+    <section class="t-keys">
+      ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
+        <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
+        <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
+        <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
+      ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
+        <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
+    </section>
+    </aside>
     <section class="t-board">
       <div class="board">
         ${colArrows('up', '▲')}
@@ -276,17 +295,6 @@ function renderTable(spectator) {
       </div>
       ${ui.sel ? renderPrompt() : ''}
       ${view.phase === 'showdown' && ui.hideShowdown ? `<div class="row-btns" style="justify-content:center"><button class="btn" data-act="showResults">Show results</button></div>` : ''}
-    </section>
-    <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
-    <section class="t-log">
-      <h3>Game log</h3>
-      <ul class="log">${[...view.log].reverse().map((l) => `<li>${esc(l.text)}</li>`).join('')}</ul>
-      ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
-        <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
-        <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
-        <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
-      ${!spectator && view.phase === 'playing' ? `<div class="footer-actions">
-        <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
     </section>
   </div>`
 }

@@ -494,8 +494,12 @@ kbd {
 .table-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "info" "board" "mine" "log";
+  grid-template-areas: "info" "board" "mine" "log" "keys";
 }
+/* On narrow screens the side column's sections join the single-column grid directly. */
+.t-side { display: contents; }
+.t-keys { grid-area: keys; }
+.t-keys:empty { display: none; }
 .t-info { grid-area: info; }
 .t-board { grid-area: board; }
 .t-mine { grid-area: mine; }
@@ -507,19 +511,16 @@ kbd {
   margin-bottom: 6px;
   color: var(--ink-dim);
 }
-.t-log .kbd-hint { text-align: left; }
+.t-keys .kbd-hint { text-align: left; }
 
 main:has(.table-layout) { max-width: 1280px; }
+@media (min-width: 900px) { main:has(.table-layout) { padding-bottom: 16px; } }
 
 @media (min-width: 900px) {
   .table-layout {
     /* Board column gets at least two thirds of the width. */
     grid-template-columns: minmax(0, 2.2fr) minmax(260px, 1fr);
-    grid-template-rows: auto auto 1fr;
-    grid-template-areas:
-      "board info"
-      "board mine"
-      "board log";
+    grid-template-areas: "board side";
     column-gap: 24px;
     align-items: start;
     /* Cards sized by the board's height budget (the board now has the full screen height) and the
@@ -533,13 +534,39 @@ main:has(.table-layout) { max-width: 1280px; }
   .scores { flex-direction: column; overflow: visible; }
   .score { flex: none; border-radius: 14px; }
   .t-mine .mine-bar { margin-top: 0; margin-bottom: 4px; }
+  /* The side column is a fixed, screen-tall panel: status and hole cards on top, keyboard
+     shortcuts pinned at the bottom, and the game log scrolling in the space between. */
+  .t-side {
+    grid-area: side;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 12px;
+    height: calc(100vh - 110px);
+    min-height: 420px;
+  }
+  .t-info, .t-mine, .t-keys { flex: none; }
   .t-log {
+    flex: 1 1 auto;
+    min-height: 80px;
     margin-top: 12px;
-    max-height: calc(100vh - 420px);
-    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+  }
+  .t-log h3 { flex: none; }
+  .t-log .log {
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     padding-right: 4px;
+    overscroll-behavior: contain;
   }
+  .t-keys {
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .t-keys .kbd-hint { margin-top: 0; }
+  .t-keys .footer-actions { margin-top: 6px; text-align: left; }
 }
 
 /* Lobby setting */
