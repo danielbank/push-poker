@@ -104,6 +104,7 @@ function diff(prev, next) {
   const lm = next.game.lastMove
   if (lm && next.game.movesMade !== prev.game.movesMade) {
     ui.motion = { move: lm }
+    if (typeof playMoveSound === 'function') playMoveSound(lm)
     if (lm.type === 'shiftCol') ui.flashCol = lm.col
     else ui.flashRow = next.rows.findIndex((r) => r.owner === lm.playerId)
   }
