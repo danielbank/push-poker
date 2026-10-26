@@ -85,7 +85,7 @@ function playMoveSound(move) {
     case 'shiftCol': return chip(move.dir === 'up' ? [523, 659, 784] : [784, 659, 523], { step: 0.045 })
     case 'pickUp': return chip([988, 1319], { step: 0.07, dur: 0.12 }) // the classic coin
     case 'beltDraw': return chip([440, 660, 550, 880], { step: 0.05, dur: 0.07 }) // a roll of the dice
-    case 'plant': return chip([523, 392, 262], { step: 0.07, dur: 0.12 })
+    case 'swap': return chip([988, 1319, 988], { step: 0.06, dur: 0.09 })
     case 'bet':
       if (move.action === 'raise') return [0, 0.17].forEach(knockHit) // chips hit the table
       if (move.action === 'call') return knockHit(0)

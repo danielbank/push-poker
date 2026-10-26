@@ -630,10 +630,8 @@ main:has(.table-layout) { max-width: 1280px; }
 .hk kbd { font-size: 11px; }
 .btn .hk kbd { color: inherit; background: rgba(255, 255, 255, 0.15); border-color: currentColor; opacity: 0.8; }
 
-/* Planting: the rows you can plant in glow, everything else dims. */
-.board.aiming .row:not(.target):not(.mine) .grid5 { opacity: 0.4; }
-.row.target { box-shadow: 0 0 0 2px var(--gold); }
-.row.target .card.pickable { box-shadow: 0 0 0 2px var(--gold), 0 2px 4px rgba(0, 0, 0, 0.45); }
+/* Swapping: the cards in your row you can trade a hole card with glow. */
+.card.swap-target { box-shadow: 0 0 0 2px var(--gold), 0 2px 4px rgba(0, 0, 0, 0.45); }
 
 /* Phones: keep prompts compact so the board stays visible above them. */
 @media (max-width: 600px) {

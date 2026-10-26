@@ -51,15 +51,15 @@ Your hand is the **best 5 cards from your in-play cards plus your hole cards**, 
 
 ### Moves
 
-On your turn you make exactly one move. Moves that only touch your own row are free. Moves that change other players' hands cost chips, and those chips go into the pot.
+On your turn you make exactly one move. Some moves cost chips, and those chips go into the pot: protecting a card, drawing blind, and changing other players' hands.
 
 | Move | Cost | What it does |
 | --- | --- | --- |
 | **◀ ▶ Shift your row** | free | Your in-play cards slide one step. A card drops onto the belt at one end, and the card at the other end of the belt enters play. |
-| **Pick up a hole card** | free | Tap a card in your row and choose which side fills the gap (the prompt shows which card each side brings in). Hole cards are hidden, safe from every shift, and still count toward your hand. You can hold 1 or 2, depending on the table setting chosen in the lobby. |
+| **Pick up a hole card** | 1 chip, then 2 | Tap a card in your row and choose which side fills the gap (the button shows the belt card each side brings in). Hole cards are hidden, safe from every shift, and still count toward your hand. You can hold 1 or 2, depending on the table setting chosen in the lobby. Your first costs 1 chip and your second costs 2. |
+| **⇄ Swap** | free | Trade a hole card with a card in your row: tap the hole card, then the row card. Use it to protect a different card as the game changes. |
 | **🎲 Blind belt draw** | 1 chip | Tap a card in your row and swap it for a random card from your belt. You can see every belt card, so you can count your odds. The card you give up lands face up on your belt. |
 | **▲ ▼ Shift a column** | 2 chips | The in-play card in that column moves one row up or down through all 4 rows, wrapping from top to bottom. This changes everyone's hand. |
-| **Plant a card** | 3 chips | Tap a hole card, then tap a card in another player's row. Your card replaces theirs, and theirs goes to the middle of their belt. This is the only way a hole card leaves your hand: spend a turn hurting the leader instead of helping yourself. |
 
 ### Betting
 
@@ -87,12 +87,9 @@ On a computer you can play without the mouse. Buttons show their key on screens 
 | | <kbd>Enter</kbd> | Open the choices for the card under the cursor |
 | | <kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> | Shift your row |
 | | <kbd>Shift</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> | Shift the column under the cursor (its ▲ ▼ buttons light up) |
-| | <kbd>P</kbd> | Plant a hole card |
 | Card choices | <kbd>←</kbd> <kbd>→</kbd> | Pick the card up, filling the gap from that side |
+| | <kbd>S</kbd> | Swap it with your hole card (holding two: then <kbd>←</kbd> <kbd>→</kbd> to choose which) |
 | | <kbd>D</kbd> | Swap it for a random belt card |
-| Planting | <kbd>←</kbd> <kbd>→</kbd> | Holding two hole cards: choose which to plant |
-| | <kbd>↑</kbd> <kbd>↓</kbd> then <kbd>←</kbd> <kbd>→</kbd> | Choose the row, then the card to replace |
-| | <kbd>Enter</kbd> | Choose that card, then <kbd>Enter</kbd> again to plant |
 | Betting | <kbd>C</kbd> | Check, or call |
 | | <kbd>1</kbd> <kbd>2</kbd> <kbd>5</kbd> | Bet or raise by that much (any digit works, up to the cap) |
 | | <kbd>M</kbd> | Raise the most allowed |

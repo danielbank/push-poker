@@ -118,22 +118,44 @@ test('a blind belt draw swaps an in-play card with a random belt card', () => {
   }
 })
 
-test("planting puts a hole card in another player's row and pushes theirs to the middle of their belt", () => {
-  const { s, players } = table(3)
-  const [a, b, c] = players
-  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }) // A holds card 0
-  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
-  G.applyMove(s, c.id, { type: 'shiftRow', dir: 'left' })
-  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 0, col: 1 }), /another player/)
-  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 3, col: 1 }), /another player/)
-  const before = [...s.rows[1].cards]
-  G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 1, col: 1 })
-  assert.deepEqual(a.holes, [])
+test('picking up costs 1 chip for the first hole card and 2 for the second', () => {
+  const s = G.createState()
+  const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
+  G.setHoleCards(s, 2)
+  deal(s)
+  const pass = () => G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  assert.equal(G.viewFor(s, a.id, new Set()).game.costs.pickUp, 1)
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' })
+  assert.equal(a.chips, G.STACK - 1 - 1)
+  pass()
+  assert.equal(G.viewFor(s, a.id, new Set()).game.costs.pickUp, 2)
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' })
   assert.equal(a.chips, G.STACK - 1 - 3)
-  const after = s.rows[1].cards
-  assert.equal(after[1], 0)
-  assert.equal(after.length, 14)
-  assert.equal(after[5 + 4], before[1]) // belt of 8: inserted 4 cards in
+  assert.equal(s.game.pot, 2 + 3)
+  pass()
+  a.chips = 0
+  assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }), /already hold 2/)
+})
+
+test('swapping trades a hole card with an in-play card, for free', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }) // A holds card 0; in play 1..5
+  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  const chips = a.chips
+  G.applyMove(s, a.id, { type: 'swap', hole: 0, col: 2 })
+  assert.deepEqual(a.holes, [3])
+  assert.deepEqual(s.rows[0].cards.slice(0, 5), [1, 2, 0, 4, 5])
+  assert.equal(s.rows[0].cards.length, 12)
+  assert.equal(a.chips, chips)
+  assert.throws(() => G.applyMove(s, b.id, { type: 'swap', hole: 0, col: 0 }), /no hole card/)
+})
+
+test('planting is gone', () => {
+  const { s, players } = table()
+  G.applyMove(s, players[0].id, { type: 'pickUp', col: 0, fill: 'right' })
+  G.applyMove(s, players[1].id, { type: 'shiftRow', dir: 'left' })
+  assert.throws(() => G.applyMove(s, players[0].id, { type: 'plant', hole: 0, row: 1, col: 1 }), /Unknown move/)
 })
 
 test('streets: betting opens after rounds 3, 6 and 9, and the showdown follows the last one', () => {
@@ -267,7 +289,7 @@ test('table labels show in-play cards; your own hand and leaders include your ho
   assert.equal(G.viewFor(s, null, new Set()).game.yourHand, null)
 })
 
-test('with 2 hole cards you can hold two and choose which to plant', () => {
+test('with 2 hole cards you can hold two and choose which to swap', () => {
   const s = G.createState()
   const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
   G.setHoleCards(s, 2)
@@ -283,12 +305,13 @@ test('with 2 hole cards you can hold two and choose which to plant', () => {
   pass()
   assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }), /already hold 2/)
 
-  // Plant the second hole card (2♠) in B's row.
-  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 2, row: 1, col: 1 }), /which hole card/)
-  G.applyMove(s, a.id, { type: 'plant', hole: 1, row: 1, col: 1 })
-  assert.deepEqual(a.holes, [0])
-  assert.equal(s.rows[1].cards[1], 1)
-  assert.equal(s.rows[1].cards.length, 14)
+  // Swap the second hole card (2♠) into column 1.
+  assert.throws(() => G.applyMove(s, a.id, { type: 'swap', hole: 2, col: 1 }), /which hole card/)
+  const out = s.rows[0].cards[1]
+  G.applyMove(s, a.id, { type: 'swap', hole: 1, col: 1 })
+  assert.deepEqual(a.holes, [0, out])
+  assert.equal(s.rows[0].cards[1], 1)
+  assert.equal(s.rows[0].cards.length, 11)
 })
 
 test('hole card setting only changes between games', () => {
