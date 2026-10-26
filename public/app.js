@@ -26,6 +26,7 @@ const ui = {
   flashCol: null,
   hideShowdown: false,
   abandonArmed: false,
+  resetArmed: false,    // "Reset tally" asks for a second tap
   kbd: false,           // keyboard cursor visible (after an arrow key; hidden again on mouse/touch)
   cursor: 5,            // keyboard cursor in your row, in half-steps: even = + slot (s = p/2), odd = card (c = (p-1)/2)
 }
@@ -256,6 +257,7 @@ function renderLobby() {
         ${isHost()
           ? `<button class="btn" data-act="start" ${n < 2 ? 'disabled' : ''}>${n < 2 ? 'Need 2+ players' : 'Deal!'}</button>`
           : `<span class="waiting">Waiting for ${hostName()} (host) to deal</span>`}
+        ${isHost() && view.players.some((p) => p.wins) ? `<button class="btn ghost" data-act="resetTally">${ui.resetArmed ? 'Tap again to reset all wins to 0' : 'Reset tally'}</button>` : ''}
         ${claimHostButton()}
         <button class="btn ghost" data-act="leave">Leave table</button>
       </div>
@@ -585,6 +587,7 @@ $app.addEventListener('click', (e) => {
 
 async function act(name, d) {
   if (name !== 'abandon') ui.abandonArmed = false
+  if (name !== 'resetTally') ui.resetArmed = false
   switch (name) {
     case 'color':
       ui.color = d.color
@@ -597,6 +600,10 @@ async function act(name, d) {
     case 'kick': return send('kick', { playerId: d.id })
     case 'makeHost': return send('makeHost', { playerId: d.id })
     case 'claimHost': return send('claimHost')
+    case 'resetTally':
+      if (!ui.resetArmed) { ui.resetArmed = true; return render() }
+      ui.resetArmed = false
+      return send('resetTally')
     case 'skip': return send('skip')
     case 'nextGame': return send('nextGame')
     case 'lobby': return send('lobby')

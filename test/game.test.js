@@ -280,3 +280,16 @@ test('hole cards never count toward a hand, even at the showdown', () => {
   }
   assert.ok(!s.game.result.hands.find((h) => h.playerId === a.id).cards.includes(13))
 })
+
+test('the host can reset the win tally between games', () => {
+  const s = G.createState()
+  const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
+  a.wins = 3
+  b.wins = 1
+  G.startGame(s)
+  assert.throws(() => G.resetTally(s), /between games/)
+  G.abandonGame(s)
+  G.resetTally(s)
+  assert.deepEqual([a.wins, b.wins], [0, 0])
+  assert.match(s.log.at(-1).text, /tally was reset/)
+})

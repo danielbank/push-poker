@@ -134,6 +134,7 @@ io.on('connection', (socket) => {
   on('start', () => { host(); G.startGame(state) })
   on('settings', ({ holeCards }) => { host(); G.setHoleCards(state, Number(holeCards)) })
   on('makeHost', ({ playerId }) => { host(); G.setHost(state, playerId) })
+  on('resetTally', () => { host(); G.resetTally(state) })
   // Anyone may take over hosting while the host is offline, so a dropped host can't stall the table.
   on('claimHost', () => {
     const id = me()
