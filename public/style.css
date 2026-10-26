@@ -211,7 +211,7 @@ main {
   animation: pulse 1.6s ease-in-out infinite;
 }
 .status .sub { display: block; font-size: 13px; font-weight: 400; opacity: 0.85; margin-top: 2px; }
-.status.knocked { background: #7a1e1e; }
+.status.betting { background: #5a3a0a; }
 @keyframes pulse { 50% { filter: brightness(1.15); } }
 
 /* Board */
@@ -328,11 +328,8 @@ main {
 .hole .label { font-size: 13px; color: var(--ink-dim); line-height: 1.3; }
 .hole .card { --cw: 64px; --ch: 89px; }
 .mine-bar .spacer { flex: 1; }
-.knock {
-  font-family: 'Playfair Display', serif;
-  font-size: 20px;
-  padding: 10px 26px;
-}
+.mine-bar .stack { text-align: right; font-size: 14px; line-height: 1.4; }
+.mine-bar .stack b { font-size: 20px; color: var(--gold); }
 
 .prompt {
   background: #0b3d22 !important;
@@ -624,3 +621,22 @@ main:has(.table-layout) { max-width: 1280px; }
 .chip.black { color: #1a1a1a; }
 .chip.red { color: #c1121f; }
 .chip.next { opacity: 1; box-shadow: 0 0 0 1.5px var(--gold); }
+
+/* Chips, costs and folding. */
+.chips { font-size: 12px; font-weight: 700; color: #2a1a07; background: var(--gold); border-radius: 999px; padding: 0 7px; }
+.chips::before { content: '● '; font-size: 9px; vertical-align: 1px; }
+.put { font-size: 12px; font-weight: 700; color: var(--gold); }
+.fold-tag { font-size: 11px; font-weight: 600; font-style: italic; color: var(--ink-dim); }
+.score.folded { opacity: 0.55; }
+.row.folded .grid5, .row.folded .loop { opacity: 0.45; }
+.arrow { position: relative; }
+.arrow .cost { position: absolute; top: 2px; right: 4px; font-size: 10px; font-weight: 700; color: var(--gold); line-height: 1; }
+.arrow:disabled .cost { opacity: 0.5; }
+.prompt.betting { border: 2px solid var(--gold); }
+/* Narrow screens: wrap the scoreboard into rows rather than scrolling players out of view. */
+@media (max-width: 600px) {
+  .scores { flex-wrap: wrap; overflow: visible; }
+  .score { flex: 1 1 40%; min-width: 0; gap: 6px; }
+  .score > span:not([class]) { overflow: hidden; text-overflow: ellipsis; }
+  .score .host-tag { display: none; }
+}

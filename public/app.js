@@ -18,7 +18,7 @@ const saved = readJSON(PROFILE_KEY) || {}
 const ui = {
   name: saved.name || '',
   color: saved.color || COLORS[Math.floor(Math.random() * 6)],
-  sel: null,            // {kind:'pick', col} | {kind:'put', slot?}
+  sel: null,            // {kind:'pick', col} | {kind:'put', hole?, slot?} | {kind:'plant', hole, row, col}
   motion: null,         // what the latest state update did, for animating it once: {move} or {deal}
   dealPending: null,    // card ids still hidden while a fancy deal plays (see deal.js)
   dealing: false,       // a fancy deal is playing: the board shows bare felt
@@ -61,7 +61,7 @@ socket.on('state', (next) => {
   }
   if (next.phase !== 'playing') ui.sel = null
   // Buzz the phone when it becomes your move.
-  const myTurn = (v) => (v?.phase === 'playing' && v.players[v.game.turn]?.id === playerId) || (v?.phase === 'picking' && v.game.picker === playerId)
+  const myTurn = (v) => (v?.phase === 'playing' && v.game.current === playerId) || (v?.phase === 'picking' && v.game.picker === playerId)
   if (myTurn(next) && !myTurn(prev)) navigator.vibrate?.(150)
   render()
 })
@@ -105,11 +105,12 @@ function diff(prev, next) {
   if (prev && (!live(prev) || prev.gameNumber !== next.gameNumber)) { ui.motion = { deal: true }; return }
   if (!prev || next.phase !== 'playing' || prev.phase !== 'playing') return
   const lm = next.game.lastMove
-  if (lm && next.game.movesMade !== prev.game.movesMade) {
+  if (lm && lm.seq !== prev.game.lastMove?.seq) {
     ui.motion = { move: lm }
     if (typeof playMoveSound === 'function') playMoveSound(lm)
     if (lm.type === 'shiftCol') ui.flashCol = lm.col
-    else ui.flashRow = next.rows.findIndex((r) => r.owner === lm.playerId)
+    else if (lm.type === 'plant') ui.flashRow = lm.row
+    else if (lm.type !== 'bet') ui.flashRow = next.rows.findIndex((r) => r.owner === lm.playerId)
   }
 }
 
@@ -134,6 +135,12 @@ const claimHostButton = () => (playerId && !isHost() && view.hostId && !player(v
   ? `<button class="btn small ghost" data-act="claimHost">${hostName()} (host) is offline · Become host</button>` : '')
 const leading = (id) => view.phase === 'playing' && view.game?.leaders?.includes(id)
 const cardName = (id) => `${RANKS[(id % 13) + 1]}${SUITS[(id / 13) | 0]}`
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+const chipsTag = (n) => `<span class="chips" title="${plural(n, 'chip')}">${n}</span>`
+const cost = (type) => view.game?.costs?.[type] ?? 0
+const canAfford = (type) => (me()?.chips ?? 0) >= cost(type)
+// It's my move (not a betting turn).
+const myMove = () => view.phase === 'playing' && !view.game.betting && view.game.current === playerId
 
 function cardHTML(id, cls = '', attrs = '') {
   if (id === null || id === undefined) return `<div class="card empty ${cls}" ${attrs}></div>`
@@ -195,7 +202,7 @@ function renderJoin() {
         <div class="players" style="margin-top:12px">
           ${offline.map((p) => `
             <button class="player" style="--pc:${p.color}; text-align:left" data-act="claim" data-id="${p.id}">
-              ${avatar(p)}<div class="grow"><div class="name">${esc(p.name)}</div><div class="meta">${p.wins} win${p.wins === 1 ? '' : 's'} · offline</div></div>
+              ${avatar(p)}<div class="grow"><div class="name">${esc(p.name)}</div><div class="meta">Score ${p.score} · offline</div></div>
               <span class="btn small">That's me</span>
             </button>`).join('')}
         </div>
@@ -231,7 +238,7 @@ function playerList(manage) {
       ${avatar(p)}
       <div class="grow">
         <div class="name">${esc(p.name)}${p.id === playerId ? ' (you)' : ''} ${hostTag(p.id)}</div>
-        <div class="meta"><span class="dot ${p.online ? '' : 'off'}"></span>${p.online ? 'online' : 'offline'} · ${p.wins} win${p.wins === 1 ? '' : 's'}</div>
+        <div class="meta"><span class="dot ${p.online ? '' : 'off'}"></span>${p.online ? 'online' : 'offline'} · score ${p.score}</div>
       </div>
       ${hosting && p.id !== playerId ? `<button class="btn ghost small" data-act="makeHost" data-id="${p.id}">Make host</button>` : ''}
       ${hosting && !p.online ? `<button class="btn ghost small" data-act="kick" data-id="${p.id}">Remove</button>` : ''}
@@ -267,22 +274,26 @@ function renderLobby() {
 function rulesPanel() {
   return `<details class="panel"><summary style="cursor:pointer;font-weight:700">How to play</summary>
     <div class="muted" style="margin-top:10px;line-height:1.6">
-      Each player owns a row of 13 cards; 5 are in play. Make the best poker hand in your row.<br>
-      <b>◀ ▶</b> Shift your row (it wraps).<br>
-      <b>▲ ▼</b> Rotate a column through all four rows.<br>
-      <b>Tap a card</b> in your row to take it as a hole card, safe from everyone (up to ${view.settings.holeCards} at a time). Tap a hole card to put it back. Hole cards don't count toward your hand until you put them back.<br>
-      <b>Knock</b> once 5 full rounds are done: everyone, you included, gets one last move, then hands are compared
-      (only the 5 cards in play in your row count).
+      Each player owns a row of 13 cards; 5 are in play and the rest wait face up on the belt below.
+      Your hand is the best 5 of your in-play cards plus your hole cards.<br>
+      Every game you get ${20} chips and ante 1. Whatever you finish with is added to your score.<br>
+      <b>◀ ▶</b> Shift your row (it wraps). Free.<br>
+      <b>Tap a card</b> in your row to take it as a hidden hole card (free, up to ${view.settings.holeCards}), or swap it for a random belt card (1 chip).<br>
+      <b>▲ ▼</b> Rotate a column through all four rows (2 chips).<br>
+      <b>Tap a hole card</b> to put it back in your row (free), or plant it over a card in someone else's row (3 chips).<br>
+      <b>Betting</b> after rounds 3, 6 and 9: check, call, raise or fold. Folding ends your game, but you keep your chips.
+      After the last bet, the best hand still in takes the pot.
     </div></details>`
 }
 
 function renderTable(spectator) {
   const g = view.game
-  const turnPlayer = view.players[g.turn]
-  const mine = !spectator && view.phase === 'playing' && turnPlayer.id === playerId
+  const turnPlayer = view.phase === 'playing' ? player(g.current) : view.players[g.turn]
+  const mine = !spectator && myMove()
   const myRow = view.rows.findIndex((r) => r.owner === playerId)
   const p = me()
-  const colArrows = (dir, glyph) => `<div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="${dir}" ${mine && !ui.sel ? '' : 'disabled'} aria-label="Shift column ${c + 1} ${dir}">${glyph}</button>`).join('')}</div>`
+  const colOk = mine && !ui.sel && canAfford('shiftCol')
+  const colArrows = (dir, glyph) => `<div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="${dir}" ${colOk ? '' : 'disabled'} title="Shift column ${c + 1} ${dir}: ${plural(cost('shiftCol'), 'chip')}" aria-label="Shift column ${c + 1} ${dir}, ${plural(cost('shiftCol'), 'chip')}">${glyph}<span class="cost">${cost('shiftCol')}</span></button>`).join('')}</div>`
 
   // Two columns on wide screens: the board on the left (at least 2:1), and the scoreboard, status,
   // your hole card and the game log on the right. Narrow screens stack them in reading order.
@@ -290,8 +301,11 @@ function renderTable(spectator) {
     <aside class="t-side">
     <section class="t-info">
       <div class="scores">${view.players.map((q, i) => `
-        <div class="score ${(view.phase === 'playing' && i === g.turn) || (view.phase === 'picking' && q.id === g.picker) ? 'turn' : ''} ${q.online ? '' : 'offline'}" style="--pc:${q.color}" data-pid="${q.id}">
-          ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(q.name)}</span>${hostTag(q.id)}<span class="wins">${q.wins}</span>
+        <div class="score ${(view.phase === 'playing' && q.id === g.current) || (view.phase === 'picking' && q.id === g.picker) ? 'turn' : ''} ${q.online ? '' : 'offline'} ${q.folded ? 'folded' : ''}" style="--pc:${q.color}" data-pid="${q.id}">
+          ${avatar(q, 'sm')}<span>${leading(q.id) ? '<span class="crown" title="Best hand you can see">👑</span>' : ''}${esc(q.name)}</span>${hostTag(q.id)}
+          <span class="wins" title="Session score">${q.score}</span>
+          ${view.phase === 'playing' ? (q.folded ? '<span class="fold-tag">folded</span>' : chipsTag(q.chips)) : ''}
+          ${g.betting && q.put ? `<span class="put" title="Bet this street">+${q.put}</span>` : ''}
           ${q.holeCount ? `<span class="mini-backs" title="Holding ${q.holeCount} hole card${q.holeCount === 1 ? '' : 's'}">${'<span class="mini-back"></span>'.repeat(q.holeCount)}</span>` : ''}
           ${q.online ? '' : '<span class="dot off" title="offline"></span>'}
         </div>`).join('')}
@@ -301,7 +315,7 @@ function renderTable(spectator) {
         const waitingOn = view.phase === 'picking' ? player(g.picker) : view.phase === 'playing' ? turnPlayer : null
         if (!waitingOn || waitingOn.online || spectator) return ''
         return `<div class="banner-off"><span class="grow">${esc(waitingOn.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
-          <button class="btn small ghost" data-act="skip">${view.phase === 'picking' ? 'Pick a row for them' : 'Skip their move'}</button></div>`
+          <button class="btn small ghost" data-act="skip">${view.phase === 'picking' ? 'Pick a row for them' : g.betting ? 'Skip their bet (check, or fold to a bet)' : 'Skip their move'}</button></div>`
       })()}
     </section>
     <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
@@ -314,7 +328,7 @@ function renderTable(spectator) {
       ${!spectator && view.phase === 'playing' ? `<p class="kbd-hint">
         <kbd>←</kbd><kbd>→</kbd> select · <kbd>Enter</kbd> pick up / put down ·
         <kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> shift row · <kbd>Shift</kbd>+<kbd>↑</kbd><kbd>↓</kbd> shift column ·
-        <kbd>Shift</kbd>+<kbd>Enter</kbd> knock · <kbd>Esc</kbd> cancel</p>` : ''}
+        <kbd>Esc</kbd> cancel</p>` : ''}
       ${!spectator && isHost() && (view.phase === 'playing' || view.phase === 'picking') ? `<div class="footer-actions">
         <button class="link" data-act="abandon">${ui.abandonArmed ? 'Tap again to abandon this game (no winner)' : 'Abandon game'}</button></div>` : ''}
       ${!spectator && claimHostButton() ? `<div class="footer-actions">${claimHostButton()}</div>` : ''}
@@ -326,7 +340,7 @@ function renderTable(spectator) {
         ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
         ${colArrows('down', '▼')}
       </div>
-      ${ui.sel ? renderPrompt() : ''}
+      ${ui.sel ? renderPrompt() : renderBetting(spectator)}
       ${view.phase === 'showdown' && ui.hideShowdown ? `<div class="row-btns" style="justify-content:center"><button class="btn" data-act="showResults">Show results</button></div>` : ''}
     </section>
   </div>`
@@ -341,12 +355,15 @@ function renderStatus(mine, turnPlayer) {
     if (picker.id === playerId) return `<div class="status mine" style="--pc:${picker.color}; --on-pc:${textOn(picker.color)}">Choose your row!<span class="sub">Pick order: ${order}</span></div>`
     return `<div class="status">${avatar(picker, 'sm').replace('<img', '<img style="vertical-align:middle;margin-right:6px;--pc:' + picker.color + '"')}${esc(picker.name)} is choosing a row…<span class="sub">Pick order: ${order}</span></div>`
   }
-  const knocker = g.knockedBy && player(g.knockedBy)
-  const sub = knocker
-    ? `${esc(knocker.name)} knocked · ${g.finalMovesLeft} final move${g.finalMovesLeft === 1 ? '' : 's'} left`
-    : g.canKnock ? `Round ${g.round} · knocking is open` : `Round ${g.round} · knocking opens after round ${g.roundsBeforeKnock}`
-  if (mine) return `<div class="status mine" style="--pc:${turnPlayer.color}; --on-pc:${textOn(turnPlayer.color)}">Your move!<span class="sub">${sub}</span></div>`
-  return `<div class="status ${knocker ? 'knocked' : ''}">${avatar(turnPlayer, 'sm').replace('<img', '<img style="vertical-align:middle;margin-right:6px;--pc:' + turnPlayer.color + '"')}Waiting for ${esc(turnPlayer.name)}…<span class="sub">${sub}</span></div>`
+  const b = g.betting
+  const next = g.nextStreet
+  const sub = b
+    ? `${b.name} betting · Pot ${g.pot}${b.bet ? ` · Bet ${b.bet}` : ''}`
+    : `Round ${g.round} · Pot ${g.pot} · ${next >= 0 ? `${g.streetNames[next]} betting after round ${g.streetRounds[next]}` : 'Showdown next'}`
+  const yours = g.current === playerId
+  const title = b ? (yours ? 'Your bet!' : `${esc(turnPlayer.name)} is betting…`) : yours ? 'Your move!' : `Waiting for ${esc(turnPlayer.name)}…`
+  if (yours) return `<div class="status mine" style="--pc:${turnPlayer.color}; --on-pc:${textOn(turnPlayer.color)}">${title}<span class="sub">${sub}</span></div>`
+  return `<div class="status ${b ? 'betting' : ''}">${avatar(turnPlayer, 'sm').replace('<img', '<img style="vertical-align:middle;margin-right:6px;--pc:' + turnPlayer.color + '"')}${title}<span class="sub">${sub}</span></div>`
 }
 
 function renderRow(row, r, myActiveRow, myTurn) {
@@ -354,13 +371,16 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const isMine = row.owner === playerId
   const result = (view.phase === 'showdown' && view.game.result?.hands.find((h) => h.playerId === row.owner)) || null
   const sel = ui.sel
-  const canPick = myActiveRow && canPickMore() && !sel
+  const canPick = myActiveRow && !sel
   const kbdOn = ui.kbd && myActiveRow && !sel
+  // While a hole card is chosen, other players' cards can be tapped to plant it there.
+  const plantable = myTurn && sel?.kind === 'put' && sel.hole !== undefined && sel.slot === undefined &&
+    owner && !isMine && !owner.folded && canAfford('plant')
   const shownHand = isMine && view.game.yourHand
     ? `<span class="hand" title="Your best 5 cards, hole cards included">${view.game.yourHand}</span>`
     : row.hand ? `<span class="hand" title="Best hand from the cards on the table. Hole cards are hidden and can improve it.">${row.hand}${owner && player(owner.id)?.holeCount ? ' +?' : ''}</span>` : ''
   const label = owner
-    ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand you can see">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
+    ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand you can see">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}${owner.folded ? ' <span class="fold-tag">folded</span>' : ''}</span>
        ${result ? '' : shownHand}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
     : view.phase === 'picking'
@@ -376,13 +396,15 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const cards = row.inPlay.map((id, c) => {
     const cls = [
       ui.flashCol === c ? 'col-flash' : '',
-      canPick ? 'pickable' : '',
+      canPick || plantable ? 'pickable' : '',
       sel?.kind === 'pick' && myActiveRow && sel.col === c ? 'selected' : '',
+      sel?.kind === 'plant' && sel.row === r && sel.col === c ? 'selected' : '',
       kbdOn && cursorPos() === 2 * c + 1 ? 'kbd-focus' : '',
       result?.cards.includes(id) ? 'win' : '',
       ui.dealPending?.has(String(id)) ? 'deal-pending' : '',
     ].join(' ')
-    const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Take ${cardName(id)} as hole card"` : ''
+    const attrs = canPick ? `data-act="pick" data-col="${c}" role="button" tabindex="0" aria-label="Pick up or draw over ${cardName(id)}"`
+      : plantable ? `data-act="plantAt" data-row="${r}" data-col="${c}" role="button" tabindex="0" aria-label="Plant over ${cardName(id)}"` : ''
     return cardHTML(id, cls, `${attrs} data-pos="${c}"`)
   }).join('')
 
@@ -393,7 +415,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
         style="left: calc(${s} * (var(--cw) + var(--gap)) - var(--gap) / 2 + ${s === 0 ? '6px' : s === 5 ? '-6px' : '0px'})" aria-label="Insert at position ${s + 1}">+</button>`).join('')
     : ''
 
-  return `<div class="row ${isMine ? 'mine' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
+  return `<div class="row ${isMine ? 'mine' : ''} ${owner?.folded ? 'folded' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
     <div class="row-label">${label}${arrows}</div>
     <div class="grid5">${cards}${slots}</div>
     ${renderLoop(row)}
@@ -427,15 +449,16 @@ function renderMineBar(mine, p) {
   }).join('')
   const word = max === 1 ? 'Hole card' : 'Hole cards'
   // Hole cards are hidden, safe from shifts, and count toward your hand.
-  const hint = held.length
-    ? `${canPut ? 'Tap one to put it back' : 'Safe from shifts'}<br><span class="muted">Counts toward your hand</span>`
-    : mine ? 'Tap a card in your row<br>to pick one up' : 'None held'
+  const hint = p.folded ? 'You folded this game'
+    : held.length
+    ? `${canPut ? 'Tap one to put it back or plant it' : 'Safe from shifts'}<br><span class="muted">Counts toward your hand</span>`
+    : mine ? 'Tap a card in your row<br>to pick it up or draw' : 'None held'
   return `<div class="mine-bar">
     <div class="hole">${slots}
       <div class="label"><b>${word}</b><br>${hint}</div>
     </div>
     <div class="spacer"></div>
-    ${view.phase === 'playing' && !g.knockedBy ? `<button class="btn danger knock" data-act="knock" ${mine && g.canKnock && !ui.sel ? '' : 'disabled'}>Knock</button>` : ''}
+    ${view.phase === 'playing' ? `<div class="stack"><div><b>${p.chips}</b> chips</div><div class="muted">Pot ${g.pot}</div></div>` : ''}
   </div>`
 }
 
@@ -448,15 +471,30 @@ function renderPrompt() {
     const id = row.inPlay[s.col]
     const out = row.outOfPlay || []
     const brings = (c) => (c === undefined ? '' : ` (brings in ${cardName(c)})`)
-    return `<div class="prompt"><p>Pick up ${cardName(id)} as a hole card. Which side fills the gap? ${keys}</p>
+    const room = canPickMore() && out.length
+    const draw = `<button class="btn ${room ? 'ghost' : ''}" data-act="beltDraw" ${out.length && canAfford('beltDraw') ? '' : 'disabled'}>🎲 Swap for a random belt card · ${plural(cost('beltDraw'), 'chip')}</button>`
+    return `<div class="prompt"><p>${room ? `Pick up ${cardName(id)} as a hole card. Which side fills the gap? ${keys}` : `${cardName(id)}: your hole card${view.settings.holeCards === 1 ? ' slot is' : ' slots are'} full.`}
+      Or swap it blind for one of the ${out.length} cards on your belt.</p>
       <div class="row-btns">
-        <button class="btn" data-act="pickFill" data-fill="left">◀ From the left${brings(out[out.length - 1])}</button>
-        <button class="btn" data-act="pickFill" data-fill="right">From the right${brings(out[0])} ▶</button>
+        ${room ? `<button class="btn" data-act="pickFill" data-fill="left">◀ From the left${brings(out[out.length - 1])}</button>
+        <button class="btn" data-act="pickFill" data-fill="right">From the right${brings(out[0])} ▶</button>` : ''}
+        ${draw}
+        <button class="btn ghost" data-act="cancel">Cancel</button>
+      </div></div>`
+  }
+  if (s.kind === 'plant') {
+    const victim = player(view.rows[s.row].owner)
+    return `<div class="prompt"><p>Plant ${cardName(held[s.hole])} over ${cardName(view.rows[s.row].inPlay[s.col])} in ${esc(victim.name)}'s row? The card it replaces goes to the middle of their belt.</p>
+      <div class="row-btns">
+        <button class="btn" data-act="plantGo">Plant it · ${plural(cost('plant'), 'chip')}</button>
         <button class="btn ghost" data-act="cancel">Cancel</button>
       </div></div>`
   }
   if (s.slot === undefined) {
-    return `<div class="prompt"><p>Put ${cardName(held[s.hole ?? 0])} back. Tap a <b style="color:var(--gold)">+</b> in your row to choose where it goes.</p>
+    const plant = s.hole !== undefined && (canAfford('plant')
+      ? ` Or tap a card in another player's row to plant it there (${plural(cost('plant'), 'chip')}).`
+      : ` Planting it in another row costs ${plural(cost('plant'), 'chip')}.`)
+    return `<div class="prompt"><p>Put ${cardName(held[s.hole ?? 0])} back. Tap a <b style="color:var(--gold)">+</b> in your row to choose where it goes.${plant || ''}</p>
       <div class="row-btns"><button class="btn ghost" data-act="cancel">Cancel</button></div></div>`
   }
   if (s.hole === undefined) {
@@ -475,20 +513,42 @@ function renderPrompt() {
     </div></div>`
 }
 
+// The betting controls, shown under the board on your betting turn.
+function renderBetting(spectator) {
+  const b = view.game?.betting
+  if (spectator || !b || view.game.current !== playerId) return ''
+  const p = me()
+  const toCall = b.toCall
+  const opening = b.bet === 0
+  const raises = [...new Set([1, 2, 5, b.maxRaise])].filter((n) => n >= 1 && n <= b.maxRaise).sort((x, y) => x - y)
+  const word = opening ? 'Bet' : 'Raise'
+  return `<div class="prompt betting">
+    <p><b>${b.name} betting.</b> Pot ${view.game.pot}. ${toCall ? `It's ${toCall} to call.` : opening ? 'No bets yet.' : 'You are matched.'} You have ${plural(p.chips, 'chip')}.</p>
+    <div class="row-btns">
+      ${toCall ? `<button class="btn" data-act="bet" data-action="call">Call ${toCall}</button>` : `<button class="btn" data-act="bet" data-action="check">Check</button>`}
+      ${raises.map((n) => `<button class="btn ghost" data-act="bet" data-action="raise" data-amount="${n}">${word} ${opening ? n : `+${n}`}${n === b.maxRaise && n > 5 ? ' (max)' : ''}</button>`).join('')}
+      ${b.maxRaise ? '' : '<span class="muted">No raises: someone can only just call.</span>'}
+      <button class="btn danger" data-act="bet" data-action="fold">Fold</button>
+    </div></div>`
+}
+
 function renderShowdown() {
   const res = view.game.result
-  const hands = [...res.hands].sort((a, b) => res.winners.includes(b.playerId) - res.winners.includes(a.playerId))
   const names = res.winners.map((id) => esc(player(id)?.name ?? '?')).join(' & ')
+  // Winners first, then everyone else by what they banked.
+  const order = [...view.players].sort((a, b) => res.winners.includes(b.id) - res.winners.includes(a.id) || res.banked[b.id] - res.banked[a.id])
   return `<div class="overlay"><div class="showdown">
-    <h2>${names} win${res.winners.length === 1 ? 's' : ''}!</h2>
-    ${hands.map((h) => {
-      const q = player(h.playerId)
-      if (!q) return ''
-      const won = res.winners.includes(h.playerId)
+    <h2>${names} win${res.winners.length === 1 ? 's' : ''} the pot of ${res.pot}!</h2>
+    ${res.byFold ? '<p class="muted" style="text-align:center;margin-bottom:10px">Everyone else folded, so no hands are shown.</p>' : ''}
+    ${order.map((q) => {
+      const h = res.hands.find((x) => x.playerId === q.id)
+      const won = res.winners.includes(q.id)
+      const gain = res.payouts[q.id] || 0
       return `<div class="result ${won ? 'won' : ''}" style="--pc:${q.color}">
-        <div class="head">${avatar(q, 'sm')}<span style="flex:1">${esc(q.name)} · ${h.name}</span>${won ? '🏆' : ''}<span class="muted">${q.wins} win${q.wins === 1 ? '' : 's'}</span></div>
-        <div class="cards">${h.cards.map((id) => cardHTML(id)).join('')}</div>
-        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Hole card${q.holes.length === 1 ? '' : 's'}: ${q.holes.map(cardName).join(' ')}</div>` : ''}
+        <div class="head">${avatar(q, 'sm')}<span style="flex:1">${esc(q.name)}${h ? ` · ${h.name}` : q.folded ? ' · folded' : ''}</span>${won ? '🏆' : ''}
+          <span class="muted" title="Chips banked this game, and session score">+${res.banked[q.id]}${gain ? ` (pot ${gain})` : ''} → ${q.score}</span></div>
+        ${h ? `<div class="cards">${h.cards.map((id) => cardHTML(id)).join('')}</div>` : ''}
+        ${h && q.holes?.length ? `<div class="muted" style="margin-top:6px">Hole card${q.holes.length === 1 ? '' : 's'}: ${q.holes.map(cardName).join(' ')}</div>` : ''}
       </div>`
     }).join('')}
     <div class="row-btns" style="justify-content:center">
@@ -524,14 +584,13 @@ $app.addEventListener('keydown', (e) => {
  *   Enter / Space  pick up the card under the cursor, or put your hole card down at the cursor's +
  *   Shift + ← →    shift your row
  *   Shift + ↑ ↓    shift the cursor's column
- *   Shift + Enter  knock
  *   While choosing a side: ← → choose, Esc cancels
  */
 const holeCount = () => me()?.holeCount ?? 0
 const canPickMore = () => holeCount() < view.settings.holeCards
 // The cursor walks half-steps along your row: + slots (even) only while holding a hole card,
 // cards (odd) only while you still have room to pick one up.
-const cursorValid = (p) => (p % 2 === 0 ? holeCount() > 0 : canPickMore())
+const cursorValid = (p) => (p % 2 === 0 ? holeCount() > 0 : true)
 function cursorPos() {
   if (cursorValid(ui.cursor)) return ui.cursor
   for (let d = 1; d <= 10; d++) for (const p of [ui.cursor - d, ui.cursor + d]) if (p >= 0 && p <= 10 && cursorValid(p)) return p
@@ -562,7 +621,7 @@ document.addEventListener('keydown', (e) => {
   const sel = ui.sel
 
   // A pick-up or put-down choice is open: arrows choose the side (or which hole card).
-  if (sel && (sel.kind === 'pick' || sel.slot !== undefined)) {
+  if (sel && sel.kind !== 'plant' && (sel.kind === 'pick' || sel.slot !== undefined)) {
     if (side) {
       e.preventDefault()
       if (sel.kind === 'pick') return act('pickFill', { fill: side })
@@ -577,7 +636,6 @@ document.addEventListener('keydown', (e) => {
   if (shiftKey) {
     if (side) { e.preventDefault(); return act('row', { dir: side }) }
     if (vertical) { e.preventDefault(); ui.kbd = true; return act('col', { col: cursorColumn(), dir: vertical }) }
-    if (key === 'Enter') { e.preventDefault(); return act('knock') }
     return
   }
 
@@ -590,7 +648,7 @@ document.addEventListener('keydown', (e) => {
   // Let Enter/Space on a focused button do its own thing.
   if ((key === 'Enter' || key === ' ') && ui.kbd && !e.target.closest('button, [data-act]')) {
     e.preventDefault()
-    if (view.players[view.game.turn]?.id !== playerId) return toast(`It is ${view.players[view.game.turn].name}'s move`)
+    if (!myMove()) return toast(view.game.betting ? 'It is a betting round' : `It is ${player(view.game.current).name}'s move`)
     const pos = cursorPos()
     return pos % 2 === 0 ? act('slot', { slot: pos / 2 }) : act('pick', { col: (pos - 1) / 2 })
   }
@@ -627,7 +685,10 @@ async function act(name, d) {
       return send('abandon')
     case 'row': return move({ type: 'shiftRow', dir: d.dir })
     case 'col': return move({ type: 'shiftCol', col: Number(d.col), dir: d.dir })
-    case 'knock': return move({ type: 'knock' })
+    case 'beltDraw': return move({ type: 'beltDraw', col: ui.sel.col })
+    case 'plantAt': ui.sel = { kind: 'plant', hole: ui.sel.hole, row: Number(d.row), col: Number(d.col) }; return render()
+    case 'plantGo': return move({ type: 'plant', hole: ui.sel.hole, row: ui.sel.row, col: ui.sel.col })
+    case 'bet': return move({ type: 'bet', action: d.action, amount: d.amount === undefined ? undefined : Number(d.amount) })
     case 'pick': ui.sel = { kind: 'pick', col: Number(d.col) }; return render()
     case 'pickFill': return move({ type: 'pickUp', col: ui.sel.col, fill: d.fill })
     // Putting down needs three answers, gathered in whatever order the player gives them:

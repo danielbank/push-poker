@@ -63,7 +63,7 @@ function toneHit({ at = 0, dur = 0.1, type = 'sine', freq = 440, toFreq, gain = 
   return osc
 }
 
-/* ---------- Move sounds: 8-bit blips for each action, and a knock on the table ---------- */
+/* ---------- Move sounds: 8-bit blips for each action, and chips hitting the table ---------- */
 
 // A quick run of square-wave notes, chiptune style.
 function chip(notes, { step = 0.055, dur = 0.07, gain = 0.1 } = {}) {
@@ -85,7 +85,13 @@ function playMoveSound(move) {
     case 'shiftCol': return chip(move.dir === 'up' ? [523, 659, 784] : [784, 659, 523], { step: 0.045 })
     case 'pickUp': return chip([988, 1319], { step: 0.07, dur: 0.12 }) // the classic coin
     case 'putDown': return chip([1319, 988, 659], { step: 0.06, dur: 0.09 })
-    case 'knock': return [0, 0.17, 0.34].forEach(knockHit) // three raps
+    case 'beltDraw': return chip([440, 660, 550, 880], { step: 0.05, dur: 0.07 }) // a roll of the dice
+    case 'plant': return chip([523, 392, 262], { step: 0.07, dur: 0.12 })
+    case 'bet':
+      if (move.action === 'raise') return [0, 0.17].forEach(knockHit) // chips hit the table
+      if (move.action === 'call') return knockHit(0)
+      if (move.action === 'fold') return chip([392, 330, 262], { step: 0.08, dur: 0.1 })
+      return chip([660], { dur: 0.06 }) // check
   }
 }
 

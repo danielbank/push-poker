@@ -74,25 +74,160 @@ test('turn order is enforced', () => {
   assert.throws(() => G.applyMove(s, players[1].id, { type: 'shiftRow', dir: 'left' }), /P0's move/)
 })
 
-test('knock unlocks after 5 rounds; everyone, knocker included, gets one more move, then showdown', () => {
+// Play out the rest of the game: free row shifts on move turns, checks or calls on betting turns.
+function playOut(s) {
+  while (s.phase === 'playing') {
+    const p = G.currentPlayer(s)
+    if (!s.game.betting) G.applyMove(s, p.id, { type: 'shiftRow', dir: 'left' })
+    else {
+      const toCall = s.game.betting.bet - (s.game.betting.put[p.id] || 0)
+      G.applyMove(s, p.id, { type: 'bet', action: toCall ? 'call' : 'check' })
+    }
+  }
+}
+
+// Make free moves until a betting round opens.
+function toStreet(s) {
+  while (!s.game.betting) G.applyMove(s, G.currentPlayer(s).id, { type: 'shiftRow', dir: 'left' })
+}
+
+test('everyone antes from a fresh stack; strong moves cost chips that go into the pot', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  assert.equal(s.game.pot, 2)
+  assert.deepEqual(players.map((p) => p.chips), [G.STACK - 1, G.STACK - 1])
+  G.applyMove(s, a.id, { type: 'shiftCol', col: 0, dir: 'down' })
+  assert.equal(a.chips, G.STACK - 3)
+  assert.equal(s.game.pot, 4)
+  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  assert.equal(b.chips, G.STACK - 1)
+  a.chips = 1
+  assert.throws(() => G.applyMove(s, a.id, { type: 'shiftCol', col: 0, dir: 'down' }), /costs 2 chips and you have 1/)
+  assert.equal(s.game.pot, 4)
+})
+
+test('a blind belt draw swaps an in-play card with a random belt card', () => {
+  const { s, players } = table()
+  const [a] = players
+  for (let i = 0; i < 30; i++) {
+    const before = [...s.rows[0].cards]
+    s.game.turn = 0
+    a.chips = 10
+    G.applyMove(s, a.id, { type: 'beltDraw', col: 2 })
+    const after = s.rows[0].cards
+    assert.equal(after.length, 13)
+    assert.ok(before.slice(5).includes(after[2]), 'the new card came from the belt')
+    assert.ok(after.slice(5).includes(before[2]), 'the old card went onto the belt')
+    assert.deepEqual([...after].sort(), [...before].sort())
+    assert.equal(a.chips, 9)
+  }
+})
+
+test("planting puts a hole card in another player's row and pushes theirs to the middle of their belt", () => {
   const { s, players } = table(3)
-  const move = (p) => G.applyMove(s, p.id, { type: 'shiftRow', dir: 'left' })
-  for (let i = 0; i < 14; i++) move(players[i % 3])
-  // 14 moves = 4 full rounds + 2. P2 cannot knock yet.
-  assert.throws(() => G.applyMove(s, players[2].id, { type: 'knock' }), /unlocks/)
-  move(players[2])
-  G.applyMove(s, players[0].id, { type: 'knock' })
-  assert.equal(s.phase, 'playing')
-  move(players[1])
-  assert.throws(() => G.applyMove(s, players[2].id, { type: 'knock' }), /already knocked/)
-  move(players[2])
-  assert.equal(s.phase, 'playing')
-  assert.equal(s.game.finalMovesLeft, 1)
-  move(players[0]) // the knocker's last move
+  const [a, b, c] = players
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }) // A holds card 0
+  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  G.applyMove(s, c.id, { type: 'shiftRow', dir: 'left' })
+  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 0, col: 1 }), /another player/)
+  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 3, col: 1 }), /another player/)
+  const before = [...s.rows[1].cards]
+  G.applyMove(s, a.id, { type: 'plant', hole: 0, row: 1, col: 1 })
+  assert.deepEqual(a.holes, [])
+  assert.equal(a.chips, G.STACK - 1 - 3)
+  const after = s.rows[1].cards
+  assert.equal(after[1], 0)
+  assert.equal(after.length, 14)
+  assert.equal(after[5 + 4], before[1]) // belt of 8: inserted 4 cards in
+})
+
+test('streets: betting opens after rounds 3, 6 and 9, and the showdown follows the last one', () => {
+  const { s, players } = table()
+  toStreet(s)
+  assert.equal(s.game.betting.street, 0)
+  assert.equal(s.game.round, 4)
+  assert.throws(() => G.applyMove(s, players[0].id, { type: 'shiftRow', dir: 'left' }), /betting round/)
+  G.applyMove(s, players[0].id, { type: 'bet', action: 'check' })
+  G.applyMove(s, players[1].id, { type: 'bet', action: 'check' })
+  assert.equal(s.game.betting, null)
+  toStreet(s)
+  assert.equal(s.game.betting.street, 1)
+  playOut(s)
   assert.equal(s.phase, 'showdown')
-  const winners = s.game.result.winners
-  assert.ok(winners.length >= 1)
-  assert.equal(players.reduce((sum, p) => sum + p.wins, 0), winners.length)
+  assert.equal(s.game.round, 10)
+})
+
+test('bet, raise, call and fold; raises are capped so everyone can always call', () => {
+  const { s, players } = table(3)
+  const [a, b, c] = players
+  const bet = (p, action, amount) => G.applyMove(s, p.id, { type: 'bet', action, amount })
+  toStreet(s)
+  assert.equal(G.currentPlayer(s).id, a.id)
+  assert.throws(() => bet(a, 'call'), /Nothing to call/)
+  bet(a, 'raise', 3)
+  assert.throws(() => bet(b, 'check'), /Call 3/)
+  c.chips = 6
+  // C can put in at most 6, so the bet can reach 6 at most: B may raise by 3, not 4.
+  assert.throws(() => bet(b, 'raise', 4), /most you can raise is 3/)
+  bet(b, 'raise', 2) // to 5
+  bet(c, 'fold')
+  bet(a, 'call')
+  assert.equal(s.game.betting, null)
+  assert.equal(a.chips, G.STACK - 1 - 5)
+  assert.equal(b.chips, G.STACK - 1 - 5)
+  assert.equal(s.game.pot, 3 + 10)
+  // C has folded: no more moves for C.
+  G.applyMove(s, a.id, { type: 'shiftRow', dir: 'left' })
+  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
+  assert.equal(G.currentPlayer(s).id, a.id)
+  assert.equal(G.viewFor(s, a.id, new Set()).players[2].folded, true)
+})
+
+test('when everyone else folds, the last player takes the pot unseen', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  toStreet(s)
+  G.applyMove(s, a.id, { type: 'bet', action: 'raise', amount: 4 })
+  G.applyMove(s, b.id, { type: 'bet', action: 'fold' })
+  assert.equal(s.phase, 'showdown')
+  assert.deepEqual(s.game.result.winners, [a.id])
+  assert.equal(s.game.result.byFold, true)
+  // A gets back the bet plus both antes; B banks what they had left.
+  assert.equal(a.score, G.STACK - 1 - 4 + 6)
+  assert.equal(b.score, G.STACK - 1)
+  assert.equal(G.viewFor(s, b.id, new Set()).players[0].holes, null)
+})
+
+test('an offline bettor is skipped with a check, or a fold if they face a bet', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  toStreet(s)
+  G.applyMove(s, a.id, { type: 'pass' })
+  assert.equal(G.currentPlayer(s).id, b.id)
+  G.applyMove(s, b.id, { type: 'bet', action: 'raise', amount: 2 })
+  G.applyMove(s, a.id, { type: 'pass' })
+  assert.equal(a.folded, true)
+  assert.equal(s.phase, 'showdown')
+})
+
+test('the pot goes to the best hand, splits on a tie, and every stack is banked to the score', () => {
+  const { s, players } = table(3)
+  playOut(s)
+  const r = s.game.result
+  assert.equal(r.pot, 3)
+  const paid = Object.values(r.payouts).reduce((x, y) => x + y, 0)
+  assert.equal(paid, 3)
+  for (const p of players) assert.equal(p.score, G.STACK - 1 + (r.payouts[p.id] || 0))
+  assert.equal(players.reduce((t, p) => t + p.score, 0), 3 * G.STACK)
+})
+
+test('a saved game from before chips goes back to the lobby', () => {
+  const old = { phase: 'playing', players: [{ id: 'x', holes: [3], wins: 2 }], rows: [{}], game: { turn: 0, knockedBy: null }, gameNumber: 1, log: [] }
+  const s = G.normalizeState(old)
+  assert.equal(s.phase, 'lobby')
+  assert.equal(s.game, null)
+  assert.equal(s.players[0].score, 0)
+  assert.deepEqual(s.players[0].holes, [])
 })
 
 test('first player rotates each game and players can join between games', () => {
@@ -196,11 +331,11 @@ test('hole card setting only changes between games and survives old saves', () =
   assert.deepEqual(fixed.players.map((p) => p.holes), [[7], []])
 })
 
-test('players pick rows: most wins first, then round-robin; leftover rows stay neutral', () => {
+test('players pick rows: highest score first, then round-robin; leftover rows stay neutral', () => {
   const s = G.createState()
   const [a, b, c] = ['A', 'B', 'C'].map((name) => G.addPlayer(s, { name }))
-  b.wins = 3
-  a.wins = 1
+  b.score = 30
+  a.score = 10
   G.startGame(s)
   assert.equal(s.phase, 'picking')
   assert.ok(s.rows.every((r) => r.owner === null))
@@ -219,14 +354,14 @@ test('players pick rows: most wins first, then round-robin; leftover rows stay n
   G.applyMove(s, mover.id, { type: 'shiftRow', dir: 'left' })
 })
 
-test('a tie for most wins is broken at random among the leaders only', () => {
+test('a tie for highest score is broken at random among the leaders only', () => {
   const firsts = new Set()
   for (let i = 0; i < 60; i++) {
     const s = G.createState()
     const [a, b, c] = ['A', 'B', 'C'].map((name) => G.addPlayer(s, { name }))
-    a.wins = 2
-    c.wins = 2
-    b.wins = 1
+    a.score = 20
+    c.score = 20
+    b.score = 10
     G.startGame(s)
     firsts.add(G.getPlayer(s, s.game.pickOrder[0]).name)
     // Round-robin from the first picker in seat order.
@@ -274,11 +409,7 @@ test('hole cards count toward a hand, including at the showdown', () => {
   a.holes = [13]
   assert.equal(G.handFor(s, a).name, 'Pair')
 
-  // Play to the showdown: 5 rounds, A knocks, then everyone's last move.
-  const turn = () => G.currentPlayer(s)
-  while (!G.canKnock(s)) G.applyMove(s, turn().id, { type: 'shiftRow', dir: 'left' })
-  G.applyMove(s, turn().id, { type: 'knock' })
-  while (s.phase !== 'showdown') G.applyMove(s, turn().id, { type: 'shiftRow', dir: 'left' })
+  playOut(s)
 
   for (const p of [a, b]) {
     const scored = s.game.result.hands.find((h) => h.playerId === p.id)
