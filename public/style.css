@@ -10,7 +10,7 @@
   --danger: #ef6f6c;
   --gap: clamp(4px, 1.4vw, 10px);
   /* Five cards plus gaps must fit a phone with a 16px gutter on each side. */
-  --cw: min(calc((100vw - 32px - 4 * var(--gap) - 16px) / 5), 92px, max(52px, calc((100vh - 380px) / 7.2)));
+  --cw: min(calc((100vw - 32px - 4 * var(--gap) - 16px) / 5), 92px, max(52px, calc((100vh - 470px) / 7.2)));
   --ch: calc(var(--cw) * 1.39);
 }
 
@@ -514,7 +514,7 @@ main:has(.table-layout) { max-width: 1280px; }
     align-items: start;
     /* Cards sized by the board's height budget (the board now has the full screen height) and the
        board column's width (about two thirds of the page). */
-    --cw: max(44px, min(140px, calc((100vh - 412px) / 5.56), calc((min(100vw, 1280px) * 0.66 - 140px) / 5.4)));
+    --cw: max(44px, min(140px, calc((100vh - 500px) / 5.56), calc((min(100vw, 1280px) * 0.66 - 140px) / 5.4)));
     /* --ch must be redeclared here: the :root one was computed from the :root --cw. */
     --ch: calc(var(--cw) * 1.39);
   }
@@ -616,3 +616,11 @@ main:has(.table-layout) { max-width: 1280px; }
 .seg button:disabled:not(.on) { opacity: 0.45; }
 
 .hole .label .no-count { color: var(--gold); }
+
+/* Out-of-play cards, face up, under each row. */
+.loop { display: flex; align-items: center; justify-content: space-between; gap: 2px; margin-top: 4px; font-size: 11px; }
+.loop-end { color: var(--gold); font-size: 13px; }
+.chip { background: #fff; border-radius: 4px; padding: 1px 4px; font-weight: 700; line-height: 1.4; opacity: 0.7; white-space: nowrap; }
+.chip.black { color: #1a1a1a; }
+.chip.red { color: #c1121f; }
+.chip.next { opacity: 1; box-shadow: 0 0 0 1.5px var(--gold); }

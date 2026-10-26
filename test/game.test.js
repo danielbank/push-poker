@@ -107,13 +107,16 @@ test('first player rotates each game and players can join between games', () => 
   assert.ok(players)
 })
 
-test('views hide other hole cards and out-of-play cards', () => {
+test('views hide other hole cards but show every card in every row', () => {
   const { s, players } = table()
   G.applyMove(s, players[0].id, { type: 'pickUp', col: 0, fill: 'right' })
   const v = G.viewFor(s, players[1].id, new Set())
   assert.equal(v.players[0].holes, null)
   assert.equal(v.players[0].holeCount, 1)
   assert.equal(v.rows[0].inPlay.length, 5)
+  // Out-of-play cards are face up, in wrap order: [0] enters next on the right.
+  assert.deepEqual(v.rows[0].outOfPlay, s.rows[0].cards.slice(5))
+  assert.equal(v.rows[1].outOfPlay.length, 8)
   assert.deepEqual(G.viewFor(s, players[0].id, new Set()).players[0].holes, [0])
 })
 
@@ -134,7 +137,7 @@ test('putting the hole card down at an end cannot push it straight back out', ()
   assert.deepEqual(a.holes, [])
 })
 
-test('table hands and leaders use in-play cards only', () => {
+test('table labels show in-play cards; your own hand and leaders include your hole cards', () => {
   const { s, players } = table()
   const [a, b] = players
   // Row 0: A-2-3-4-5 of spades (straight flush). Row 1: plain high card.
@@ -145,11 +148,14 @@ test('table hands and leaders use in-play cards only', () => {
   assert.deepEqual(v.game.leaders, [a.id])
   assert.equal(v.rows[1].hand, 'High Card')
   assert.equal(v.rows[2].hand, null) // neutral rows have no hand
-  // Picking up a hole card changes the hand: the held card no longer counts.
-  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }) // K♠ wraps in: K-2-3-4-5 of spades
+  // A picks up A♠. Others now see only K-2-3-4-5 of spades, but A♠ still counts for A.
+  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }) // K♠ wraps in
   v = G.viewFor(s, b.id, new Set())
   assert.equal(v.rows[0].hand, 'Flush')
-  assert.equal(G.handFor(s, a).name, 'Flush')
+  assert.equal(v.game.yourHand, 'High Card')
+  assert.equal(G.handFor(s, a).name, 'Straight Flush')
+  assert.equal(G.viewFor(s, a.id, new Set()).game.yourHand, 'Straight Flush')
+  assert.equal(G.viewFor(s, null, new Set()).game.yourHand, null)
 })
 
 test('with 2 hole cards you can hold two and choose which to put down', () => {
@@ -259,13 +265,14 @@ test('the first player to join hosts; hosting passes on when the host leaves', (
   assert.equal(old.hostId, 'x')
 })
 
-test('hole cards never count toward a hand, even at the showdown', () => {
+test('hole cards count toward a hand, including at the showdown', () => {
   const { s, players } = table()
   const [a, b] = players
-  // A's in-play cards: A♠ 2♥ 4♣ 7♦ 10♠ (high card). Holding A♥ would make a pair, but held cards don't count.
+  // A's in-play cards: A♠ 2♥ 4♣ 7♦ 10♠ (high card). Holding A♥ makes a pair of aces.
   s.rows[0].cards = [0, 14, 29, 45, 9, ...s.rows[0].cards.slice(5).filter((c) => c !== 13)]
+  for (const r of s.rows.slice(1)) r.cards = r.cards.filter((c) => c !== 13)
   a.holes = [13]
-  assert.equal(G.handFor(s, a).name, 'High Card')
+  assert.equal(G.handFor(s, a).name, 'Pair')
 
   // Play to the showdown: 5 rounds, A knocks, then everyone's last move.
   const turn = () => G.currentPlayer(s)
@@ -275,8 +282,10 @@ test('hole cards never count toward a hand, even at the showdown', () => {
 
   for (const p of [a, b]) {
     const scored = s.game.result.hands.find((h) => h.playerId === p.id)
-    const inPlay = s.rows.find((r) => r.owner === p.id).cards.slice(0, 5)
-    assert.deepEqual([...scored.cards].sort(), [...inPlay].sort())
+    const pool = [...s.rows.find((r) => r.owner === p.id).cards.slice(0, 5), ...p.holes]
+    assert.ok(scored.cards.every((c) => pool.includes(c)))
+    assert.deepEqual(scored.score, G.handFor(s, p).score)
   }
-  assert.ok(!s.game.result.hands.find((h) => h.playerId === a.id).cards.includes(13))
+  // A still holds A♥ and it can be part of the scored hand.
+  assert.deepEqual(a.holes, [13])
 })

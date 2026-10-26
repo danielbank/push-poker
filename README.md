@@ -31,7 +31,7 @@ Set `PORT` to change the port (default `3000`) and `STATE_FILE` to change where 
 
 ### The deal
 
-The whole deck is dealt into **4 rows of 13 cards**, with a randomly chosen flourish: a Solitaire-style slinky deal, a riffle shuffle, or an explosion. Tap or press any key to skip it. Only **5 cards in each row are in play**, and those are the only ones anyone can see. The rest of the row sits out of play, in order, and wraps around like a loop.
+The whole deck is dealt into **4 rows of 13 cards**, with a randomly chosen flourish: a Solitaire-style slinky deal, a riffle shuffle, or an explosion. Tap or press any key to skip it. Only **5 cards in each row are in play**. The rest of the row sits out of play, face up, on a belt under the row, and wraps around like a loop. The card at each end of the belt is the next one in on that side, so you can always see what a shift will bring.
 
 ### Choosing rows
 
@@ -47,15 +47,15 @@ Your goal is to have the best poker hand in your row when the game ends.
 
 On your turn you make exactly one move:
 
-- **◀ ▶ Shift your row.** Your in-play cards slide one step left or right. A card leaves play at one end, and the next out-of-play card enters at the other. The row wraps, so you can always shift.
+- **◀ ▶ Shift your row.** Your in-play cards slide one step left or right. A card drops onto the belt at one end, and the card at the other end of the belt enters play. The row wraps, so you can always shift.
 - **▲ ▼ Shift a column.** Pick one of the 5 columns. The in-play card in that column moves one row up or down through all 4 rows, wrapping from top to bottom. This is how cards change hands between players.
-- **Pick up a hole card.** Tap a card in your row to take it as a hole card. It is hidden from the other players and safe from every shift, but it doesn't count toward your hand until you put it back down. Choose whether the gap fills from the left or the right, so you still have 5 cards in play. You can hold 1 or 2 hole cards at a time, depending on the table setting chosen in the lobby.
+- **Pick up a hole card.** Tap a card in your row to take it as a hole card. It is hidden from the other players, safe from every shift, and still counts toward your hand. Choose whether the gap fills from the left or the right (the prompt shows which card each side brings in), so you still have 5 cards in play. You can hold 1 or 2 hole cards at a time, depending on the table setting chosen in the lobby.
 - **Put a hole card down.** Tap the hole card you want to place, tap a **+** to choose where it goes in your row, then choose which end card gets pushed out of play. If you put it at the very start or end of the row, the card at the other end is pushed out automatically, so your hole card can never go straight back out of play.
 - **Knock.** Allowed once 5 full rounds are done (every player has moved 5 times). Knocking uses up your move. Then everyone, including you, gets one last move, and then the hands are compared.
 
 ### Reading the table
 
-Every player's row is labelled with the best hand in their 5 in-play cards, and 👑 marks whoever is leading. Since only in-play cards count, these labels show exactly how the showdown would go right now.
+Your own row is labelled with your real hand, hole cards included. Other rows show the best hand in their in-play cards, with **+?** when that player holds hidden hole cards that could improve it. 👑 marks whoever looks to be leading from what you can see.
 
 ### Keyboard shortcuts
 
@@ -72,7 +72,7 @@ On a computer you can play without the mouse:
 
 ### Showdown
 
-Your hand is your **5 in-play cards**. Hole cards don't count: holding a card only protects it from shifts, so put it back down if you want it in your hand. Standard poker rankings apply, from high card up to straight flush, and an ace can play high or low in a straight. The best hand wins the game. Tied players each get a win.
+Your hand is the **best 5 cards from your in-play cards plus your hole cards**, like Texas Hold'em. Standard poker rankings apply, from high card up to straight flush, and an ace can play high or low in a straight. The best hand wins the game. Tied players each get a win.
 
 Win counts carry over from game to game. The first player rotates each game, and new players can sit down between games.
 
@@ -99,7 +99,7 @@ public/           The browser client (index.html, app.js, style.css)
 test/             Rules and hand-ranking tests (node:test)
 ```
 
-The server owns the game state and enforces every rule. Each player is sent only what they may see: the in-play cards and their own hole cards. All hole cards are revealed at the showdown.
+The server owns the game state and enforces every rule. Each player is sent only what they may see: every card in every row, and their own hole cards. All hole cards are revealed at the showdown.
 
 ## Credits
 

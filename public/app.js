@@ -356,9 +356,12 @@ function renderRow(row, r, myActiveRow, myTurn) {
   const sel = ui.sel
   const canPick = myActiveRow && canPickMore() && !sel
   const kbdOn = ui.kbd && myActiveRow && !sel
+  const shownHand = isMine && view.game.yourHand
+    ? `<span class="hand" title="Your best 5 cards, hole cards included">${view.game.yourHand}</span>`
+    : row.hand ? `<span class="hand" title="Best hand from the cards on the table. Hole cards are hidden and can improve it.">${row.hand}${owner && player(owner.id)?.holeCount ? ' +?' : ''}</span>` : ''
   const label = owner
-    ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand on the table">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
-       ${row.hand ? `<span class="hand" title="Best hand from the cards on the table">${row.hand}</span>` : ''}
+    ? `${avatar(owner, 'sm')}<span class="grow">${leading(owner.id) ? '<span class="crown" title="Best hand you can see">👑</span>' : ''}${esc(owner.name)}${isMine ? ' (you)' : ''}</span>
+       ${result ? '' : shownHand}
        ${result ? `<span class="hand">${result.name}</span>` : ''}`
     : view.phase === 'picking'
       ? `<span class="grow neutral">Open row</span>
@@ -393,6 +396,19 @@ function renderRow(row, r, myActiveRow, myTurn) {
   return `<div class="row ${isMine ? 'mine' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
     <div class="row-label">${label}${arrows}</div>
     <div class="grid5">${cards}${slots}</div>
+    ${renderLoop(row)}
+  </div>`
+}
+
+// The out-of-play cards, face up, as a belt running under the row: the left end of the belt is
+// the next card in on the left, the right end the next card in on the right. Shifting the row
+// left drops its leftmost card onto the left end and lifts the right end into play.
+function renderLoop(row) {
+  const out = [...(row.outOfPlay || [])].reverse()
+  if (!out.length) return ''
+  const chip = (id, i) => `<span class="chip ${((id / 13) | 0) % 2 ? 'red' : 'black'} ${i === 0 || i === out.length - 1 ? 'next' : ''}" title="${cardName(id)}">${cardName(id)}</span>`
+  return `<div class="loop" title="Out of play. The end cards enter next when the row shifts.">
+    <span class="loop-end" aria-hidden="true">↱</span>${out.map(chip).join('')}<span class="loop-end" aria-hidden="true">↰</span>
   </div>`
 }
 
@@ -410,9 +426,9 @@ function renderMineBar(mine, p) {
     return cardHTML(held[i], cls, canPut ? `data-act="hole" data-hole="${i}" role="button" tabindex="0" aria-label="Put ${cardName(held[i])} down"` : '')
   }).join('')
   const word = max === 1 ? 'Hole card' : 'Hole cards'
-  // Hole cards are safe but don't score, so remind the player to put them back before the showdown.
+  // Hole cards are hidden, safe from shifts, and count toward your hand.
   const hint = held.length
-    ? `${canPut ? 'Tap one to put it back' : 'Safe from shifts'}<br><span class="no-count">Not in your hand until put back</span>`
+    ? `${canPut ? 'Tap one to put it back' : 'Safe from shifts'}<br><span class="muted">Counts toward your hand</span>`
     : mine ? 'Tap a card in your row<br>to pick one up' : 'None held'
   return `<div class="mine-bar">
     <div class="hole">${slots}
@@ -428,11 +444,14 @@ function renderPrompt() {
   const held = me().holes || []
   const keys = '<span class="keys"><kbd>←</kbd> <kbd>→</kbd></span>'
   if (s.kind === 'pick') {
-    const id = view.rows.find((r) => r.owner === playerId).inPlay[s.col]
+    const row = view.rows.find((r) => r.owner === playerId)
+    const id = row.inPlay[s.col]
+    const out = row.outOfPlay || []
+    const brings = (c) => (c === undefined ? '' : ` (brings in ${cardName(c)})`)
     return `<div class="prompt"><p>Pick up ${cardName(id)} as a hole card. Which side fills the gap? ${keys}</p>
       <div class="row-btns">
-        <button class="btn" data-act="pickFill" data-fill="left">◀ From the left</button>
-        <button class="btn" data-act="pickFill" data-fill="right">From the right ▶</button>
+        <button class="btn" data-act="pickFill" data-fill="left">◀ From the left${brings(out[out.length - 1])}</button>
+        <button class="btn" data-act="pickFill" data-fill="right">From the right${brings(out[0])} ▶</button>
         <button class="btn ghost" data-act="cancel">Cancel</button>
       </div></div>`
   }
@@ -469,7 +488,7 @@ function renderShowdown() {
       return `<div class="result ${won ? 'won' : ''}" style="--pc:${q.color}">
         <div class="head">${avatar(q, 'sm')}<span style="flex:1">${esc(q.name)} · ${h.name}</span>${won ? '🏆' : ''}<span class="muted">${q.wins} win${q.wins === 1 ? '' : 's'}</span></div>
         <div class="cards">${h.cards.map((id) => cardHTML(id)).join('')}</div>
-        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Still holding (not counted): ${q.holes.map(cardName).join(' ')}</div>` : ''}
+        ${q.holes?.length ? `<div class="muted" style="margin-top:6px">Hole card${q.holes.length === 1 ? '' : 's'}: ${q.holes.map(cardName).join(' ')}</div>` : ''}
       </div>`
     }).join('')}
     <div class="row-btns" style="justify-content:center">
