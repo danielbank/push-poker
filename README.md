@@ -59,7 +59,7 @@ On your turn you make exactly one move. Some moves cost chips, and those chips g
 | **Pick up a hole card** | 1 chip, then 2 | Tap a card in your row and choose which side fills the gap (the button shows the belt card each side brings in). Hole cards are hidden, safe from every shift, and still count toward your hand. You can hold 1 or 2, depending on the table setting chosen in the lobby. Your first costs 1 chip and your second costs 2. |
 | **⇄ Swap** | free | Trade a hole card with a card in your row: tap the hole card, then the row card. Use it to protect a different card as the game changes. |
 | **🎲 Blind belt draw** | 1 chip | Tap a card in your row and swap it for a random card from your belt. You can see every belt card, so you can count your odds. The card you give up lands face up on your belt. |
-| **▲ ▼ Shift a column** | 2 chips | The in-play card in that column moves one row up or down through all 4 rows, wrapping from top to bottom. This changes everyone's hand. |
+| **▲ ▼ Shift a column** | 2 chips | The in-play card in that column moves one row up or down through all 4 rows, wrapping from top to bottom. This changes everyone's hand. On a phone, the ▲ ▼ buttons sit right above and below your own row. |
 
 ### Betting
 

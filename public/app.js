@@ -311,7 +311,7 @@ function renderTable(spectator) {
   const myRow = view.rows.findIndex((r) => r.owner === playerId)
   const p = me()
   const colOk = mine && !ui.sel && canAfford('shiftCol')
-  const colArrows = (dir, glyph) => `<div class="grid5">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="${dir}" ${colOk ? '' : 'disabled'} title="Shift column ${c + 1} ${dir}: ${plural(cost('shiftCol'), 'chip')}" aria-label="Shift column ${c + 1} ${dir}, ${plural(cost('shiftCol'), 'chip')}">${glyph}<span class="cost">${cost('shiftCol')}</span></button>`).join('')}</div>`
+  const colArrows = (dir, glyph, cls = '') => `<div class="grid5 col-arrows ${cls}">${[0, 1, 2, 3, 4].map((c) => `<button class="arrow ${kbdColumn(mine) === c ? 'kbd-target' : ''}" data-act="col" data-col="${c}" data-dir="${dir}" ${colOk ? '' : 'disabled'} title="Shift column ${c + 1} ${dir}: ${plural(cost('shiftCol'), 'chip')}" aria-label="Shift column ${c + 1} ${dir}, ${plural(cost('shiftCol'), 'chip')}">${glyph}<span class="cost">${cost('shiftCol')}</span></button>`).join('')}</div>`
 
   // Two columns on wide screens: the board on the left (at least 2:1), and the scoreboard, status,
   // your hole card and the game log on the right. Narrow screens stack them in reading order.
@@ -355,9 +355,9 @@ function renderTable(spectator) {
     </aside>
     <section class="t-board">
       <div class="board ${ui.dealing ? 'dealing' : ''}">
-        ${colArrows('up', '▲')}
-        ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
-        ${colArrows('down', '▼')}
+        ${colArrows('up', '▲', 'edge')}
+        ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine, r === myRow && { up: colArrows('up', '▲', 'at-row'), down: colArrows('down', '▼', 'at-row') })).join('')}
+        ${colArrows('down', '▼', 'edge')}
       </div>
       ${ui.sel ? renderPrompt() : renderBetting(spectator)}
       ${view.phase === 'showdown' && ui.hideShowdown ? `<div class="row-btns" style="justify-content:center"><button class="btn" data-act="showResults">Show results</button></div>` : ''}
@@ -385,7 +385,10 @@ function renderStatus(mine, turnPlayer) {
   return `<div class="status ${b ? 'betting' : ''}">${avatar(turnPlayer, 'sm').replace('<img', '<img style="vertical-align:middle;margin-right:6px;--pc:' + turnPlayer.color + '"')}${title}<span class="sub">${sub}</span></div>`
 }
 
-function renderRow(row, r, myActiveRow, myTurn) {
+// rowArrows: on phones the column arrows sit just above and below your own row (CSS shows
+// them there instead of at the board's edges), so every move is within reach on one screen.
+// They're always present on your row, disabled off-turn, so the layout doesn't jump each turn.
+function renderRow(row, r, myActiveRow, myTurn, rowArrows) {
   const owner = row.owner && player(row.owner)
   const isMine = row.owner === playerId
   const result = (view.phase === 'showdown' && view.game.result?.hands.find((h) => h.playerId === row.owner)) || null
@@ -428,8 +431,10 @@ function renderRow(row, r, myActiveRow, myTurn) {
 
   return `<div class="row ${isMine ? 'mine' : ''} ${owner?.folded ? 'folded' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
     <div class="row-label">${label}${arrows}</div>
+    ${rowArrows ? rowArrows.up : ''}
     <div class="grid5">${cards}</div>
     ${renderLoop(row)}
+    ${rowArrows ? rowArrows.down : ''}
   </div>`
 }
 

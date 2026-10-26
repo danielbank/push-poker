@@ -640,3 +640,11 @@ main:has(.table-layout) { max-width: 1280px; }
   .prompt .row-btns { gap: 6px; margin-top: 8px; }
   .prompt .btn { min-height: 40px; padding: 6px 12px; font-size: 14px; flex: 1 1 auto; }
 }
+
+/* Column arrows: at the board's edges, except on phones, where they sit at your own row. */
+.col-arrows.at-row { display: none; }
+@media (max-width: 600px) {
+  .col-arrows.edge { display: none; }
+  .col-arrows.at-row { display: grid; margin: 4px 0; }
+  .col-arrows.at-row .arrow { min-height: 34px; }
+}
