@@ -629,3 +629,16 @@ main:has(.table-layout) { max-width: 1280px; }
 .hk { margin-left: 4px; }
 .hk kbd { font-size: 11px; }
 .btn .hk kbd { color: inherit; background: rgba(255, 255, 255, 0.15); border-color: currentColor; opacity: 0.8; }
+
+/* Planting: the rows you can plant in glow, everything else dims. */
+.board.aiming .row:not(.target):not(.mine) .grid5 { opacity: 0.4; }
+.row.target { box-shadow: 0 0 0 2px var(--gold); }
+.row.target .card.pickable { box-shadow: 0 0 0 2px var(--gold), 0 2px 4px rgba(0, 0, 0, 0.45); }
+
+/* Phones: keep prompts compact so the board stays visible above them. */
+@media (max-width: 600px) {
+  .prompt { padding: 10px 12px; }
+  .prompt p { font-size: 14px; line-height: 1.35; }
+  .prompt .row-btns { gap: 6px; margin-top: 8px; }
+  .prompt .btn { min-height: 40px; padding: 6px 12px; font-size: 14px; flex: 1 1 auto; }
+}

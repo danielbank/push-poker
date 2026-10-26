@@ -29,6 +29,7 @@ const ui = {
   kbd: false,           // keyboard cursor visible (after an arrow key; hidden again on mouse/touch)
   cursor: 2,            // keyboard cursor: a column of your row
   aim: null,            // keyboard cursor while choosing where to plant: {row, col}
+  reveal: false,        // after the next render, scroll your row into view (above any open prompt)
 }
 
 function readJSON(key) { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
@@ -63,7 +64,11 @@ socket.on('state', (next) => {
   if (next.phase !== 'playing') ui.sel = null
   // Buzz the phone when it becomes your move.
   const myTurn = (v) => (v?.phase === 'playing' && v.game.current === playerId) || (v?.phase === 'picking' && v.game.picker === playerId)
-  if (myTurn(next) && !myTurn(prev)) navigator.vibrate?.(150)
+  if (myTurn(next) && !myTurn(prev)) {
+    navigator.vibrate?.(150)
+    // On a phone your row may be scrolled away: bring it into view for your move.
+    if (next.phase === 'playing' && !next.game.betting) ui.reveal = true
+  }
   render()
 })
 
@@ -184,6 +189,7 @@ function render() {
   if (log && logScroll) log.scrollTop = logScroll
   if (p && view.phase === 'showdown' && !ui.hideShowdown) $app.insertAdjacentHTML('beforeend', renderShowdown())
   animateCards(before, ui.motion)
+  if (ui.reveal) { ui.reveal = false; revealMyRow() }
 
   // Keep typing focus across live re-renders.
   if (focusId) {
@@ -192,6 +198,18 @@ function render() {
   }
   ui.motion = null
   ui.flashRow = ui.flashCol = null
+}
+
+// Scroll just enough that your row sits on screen, clear of the prompt pinned to the bottom.
+function revealMyRow() {
+  const row = $app.querySelector('.row.mine')
+  if (!row) return
+  const r = row.getBoundingClientRect()
+  const prompt = $app.querySelector('.prompt')
+  const bottom = Math.min(innerHeight, prompt ? prompt.getBoundingClientRect().top : innerHeight) - 8
+  const smooth = reducedMotion.matches ? 'auto' : 'smooth'
+  if (r.bottom > bottom) scrollBy({ top: Math.min(r.bottom - bottom, r.top - 8), behavior: smooth })
+  else if (r.top < 8) scrollBy({ top: r.top - 8, behavior: smooth })
 }
 
 function renderJoin() {
@@ -340,7 +358,7 @@ function renderTable(spectator) {
     </section>
     </aside>
     <section class="t-board">
-      <div class="board ${ui.dealing ? 'dealing' : ''}">
+      <div class="board ${ui.dealing ? 'dealing' : ''} ${ui.sel?.kind === 'plant' && ui.sel.hole !== undefined && ui.sel.row === undefined ? 'aiming' : ''}">
         ${colArrows('up', '▲')}
         ${view.rows.map((row, r) => renderRow(row, r, mine && r === myRow, mine)).join('')}
         ${colArrows('down', '▼')}
@@ -413,7 +431,7 @@ function renderRow(row, r, myActiveRow, myTurn) {
     return cardHTML(id, cls, `${attrs} data-pos="${c}"`)
   }).join('')
 
-  return `<div class="row ${isMine ? 'mine' : ''} ${owner?.folded ? 'folded' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
+  return `<div class="row ${isMine ? 'mine' : ''} ${owner?.folded ? 'folded' : ''} ${plantable ? 'target' : ''} ${ui.flashRow === r ? 'flash' : ''}" style="--pc:${owner?.color || 'transparent'}">
     <div class="row-label">${label}${arrows}</div>
     <div class="grid5">${cards}</div>
     ${renderLoop(row)}
@@ -470,12 +488,12 @@ function renderPrompt() {
     const out = row.outOfPlay || []
     const brings = (c) => (c === undefined ? '' : ` (brings in ${cardName(c)})`)
     const room = canPickMore() && out.length
-    const draw = `<button class="btn ${room ? 'ghost' : ''}" data-act="beltDraw" ${out.length && canAfford('beltDraw') ? '' : 'disabled'}>🎲 Swap for a random belt card · ${plural(cost('beltDraw'), 'chip')} <span class="hk"><kbd>D</kbd></span></button>`
-    return `<div class="prompt"><p>${room ? `Pick up ${cardName(id)} as a hole card. Which side fills the gap? ${keys}` : `${cardName(id)}: your hole card${view.settings.holeCards === 1 ? ' slot is' : ' slots are'} full.`}
-      Or swap it blind for one of the ${out.length} cards on your belt.</p>
+    const draw = `<button class="btn ${room ? 'ghost' : ''}" data-act="beltDraw" ${out.length && canAfford('beltDraw') ? '' : 'disabled'}>🎲 Random · ${plural(cost('beltDraw'), 'chip')} <span class="hk"><kbd>D</kbd></span></button>`
+    return `<div class="prompt"><p>${room ? `Pick up ${cardName(id)}: which belt card fills the gap? ${keys}` : `${cardName(id)}: your hole card${view.settings.holeCards === 1 ? ' is' : 's are'} full.`}
+      ${room ? 'Or' : 'You can'} swap it for a random belt card.</p>
       <div class="row-btns">
-        ${room ? `<button class="btn" data-act="pickFill" data-fill="left">◀ From the left${brings(out[out.length - 1])}</button>
-        <button class="btn" data-act="pickFill" data-fill="right">From the right${brings(out[0])} ▶</button>` : ''}
+        ${room ? `<button class="btn" data-act="pickFill" data-fill="left" aria-label="Pick up, filling from the left${brings(out[out.length - 1])}">◀ ${cardName(out[out.length - 1])}</button>
+        <button class="btn" data-act="pickFill" data-fill="right" aria-label="Pick up, filling from the right${brings(out[0])}">${cardName(out[0])} ▶</button>` : ''}
         ${draw}
         <button class="btn ghost" data-act="cancel">Cancel <span class="hk"><kbd>Esc</kbd></span></button>
       </div></div>`
@@ -511,11 +529,11 @@ function renderBetting(spectator) {
   const raises = [...new Set([1, 2, 5, b.maxRaise])].filter((n) => n >= 1 && n <= b.maxRaise).sort((x, y) => x - y)
   const word = opening ? 'Bet' : 'Raise'
   return `<div class="prompt betting">
-    <p><b>${b.name} betting.</b> Pot ${view.game.pot}. ${toCall ? `It's ${toCall} to call.` : opening ? 'No bets yet.' : 'You are matched.'} You have ${plural(p.chips, 'chip')}.</p>
+    <p><b>${b.name}</b> · Pot ${view.game.pot} · ${toCall ? `${toCall} to call` : opening ? 'No bets yet' : 'You are matched'} · You have ${p.chips}</p>
     <div class="row-btns">
       ${toCall ? `<button class="btn" data-act="bet" data-action="call">Call ${toCall} <span class="hk"><kbd>C</kbd></span></button>` : `<button class="btn" data-act="bet" data-action="check">Check <span class="hk"><kbd>C</kbd></span></button>`}
       ${raises.map((n) => `<button class="btn ghost" data-act="bet" data-action="raise" data-amount="${n}">${word} ${opening ? n : `+${n}`}${n === b.maxRaise && n > 5 ? ' (max)' : ''} <span class="hk"><kbd>${n === b.maxRaise && n > 5 ? 'M' : n}</kbd></span></button>`).join('')}
-      ${b.maxRaise ? '' : '<span class="muted">No raises: someone can only just call.</span>'}
+      ${b.maxRaise ? '' : '<span class="muted">No raises: someone can only just call</span>'}
       <button class="btn danger" data-act="bet" data-action="fold">Fold <span class="hk"><kbd>F</kbd></span></button>
     </div></div>`
 }
@@ -712,7 +730,7 @@ async function act(name, d) {
     case 'plantAt': ui.sel = { kind: 'plant', hole: ui.sel.hole, row: Number(d.row), col: Number(d.col) }; return render()
     case 'plantGo': return move({ type: 'plant', hole: ui.sel.hole, row: ui.sel.row, col: ui.sel.col })
     case 'bet': return move({ type: 'bet', action: d.action, amount: d.amount === undefined ? undefined : Number(d.amount) })
-    case 'pick': ui.sel = { kind: 'pick', col: Number(d.col) }; ui.cursor = Number(d.col); return render()
+    case 'pick': ui.sel = { kind: 'pick', col: Number(d.col) }; ui.cursor = Number(d.col); ui.reveal = true; return render()
     case 'pickFill': return move({ type: 'pickUp', col: ui.sel.col, fill: d.fill })
     case 'beltDraw': return move({ type: 'beltDraw', col: ui.sel.col })
     // Planting gathers which hole card, then the target card, then a confirmation.
