@@ -281,7 +281,7 @@ function rulesPanel() {
       <b>Tap a card</b> in your row to take it as a hidden hole card (free, up to ${view.settings.holeCards}), or swap it for a random belt card (1 chip).<br>
       <b>▲ ▼</b> Rotate a column through all four rows (2 chips).<br>
       <b>Tap a hole card</b> to put it back in your row (free), or plant it over a card in someone else's row (3 chips).<br>
-      <b>Betting</b> after rounds 3, 6 and 9: check, call, raise or fold. Folding ends your game, but you keep your chips.
+      <b>Betting</b> after rounds 3, 6 and 9: check, call, raise or fold (no folding on the Flop). Folding ends your game, but you keep your chips.
       After the last bet, the best hand still in takes the pot.
     </div></details>`
 }
@@ -315,7 +315,7 @@ function renderTable(spectator) {
         const waitingOn = view.phase === 'picking' ? player(g.picker) : view.phase === 'playing' ? turnPlayer : null
         if (!waitingOn || waitingOn.online || spectator) return ''
         return `<div class="banner-off"><span class="grow">${esc(waitingOn.name)} is offline. Their seat is held; they can rejoin from the same URL.</span>
-          <button class="btn small ghost" data-act="skip">${view.phase === 'picking' ? 'Pick a row for them' : g.betting ? 'Skip their bet (check, or fold to a bet)' : 'Skip their move'}</button></div>`
+          <button class="btn small ghost" data-act="skip">${view.phase === 'picking' ? 'Pick a row for them' : g.betting ? (g.betting.canFold ? 'Skip their bet (check, or fold to a bet)' : 'Skip their bet (check or call)') : 'Skip their move'}</button></div>`
       })()}
     </section>
     <section class="t-mine">${!spectator && p ? renderMineBar(mine, p) : ''}</section>
@@ -528,7 +528,7 @@ function renderBetting(spectator) {
       ${toCall ? `<button class="btn" data-act="bet" data-action="call">Call ${toCall}</button>` : `<button class="btn" data-act="bet" data-action="check">Check</button>`}
       ${raises.map((n) => `<button class="btn ghost" data-act="bet" data-action="raise" data-amount="${n}">${word} ${opening ? n : `+${n}`}${n === b.maxRaise && n > 5 ? ' (max)' : ''}</button>`).join('')}
       ${b.maxRaise ? '' : '<span class="muted">No raises: someone can only just call.</span>'}
-      <button class="btn danger" data-act="bet" data-action="fold">Fold</button>
+      ${b.canFold ? '<button class="btn danger" data-act="bet" data-action="fold">Fold</button>' : '<span class="muted">No folding on the Flop.</span>'}
     </div></div>`
 }
 

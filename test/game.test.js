@@ -86,6 +86,11 @@ function playOut(s) {
   }
 }
 
+// Everyone still in checks, closing the betting round.
+function checkAround(s) {
+  while (s.game.betting) G.applyMove(s, G.currentPlayer(s).id, { type: 'bet', action: 'check' })
+}
+
 // Make free moves until a betting round opens.
 function toStreet(s) {
   while (!s.game.betting) G.applyMove(s, G.currentPlayer(s).id, { type: 'shiftRow', dir: 'left' })
@@ -162,6 +167,8 @@ test('bet, raise, call and fold; raises are capped so everyone can always call',
   const [a, b, c] = players
   const bet = (p, action, amount) => G.applyMove(s, p.id, { type: 'bet', action, amount })
   toStreet(s)
+  checkAround(s) // Flop
+  toStreet(s) // Turn
   assert.equal(G.currentPlayer(s).id, a.id)
   assert.throws(() => bet(a, 'call'), /Nothing to call/)
   bet(a, 'raise', 3)
@@ -183,9 +190,23 @@ test('bet, raise, call and fold; raises are capped so everyone can always call',
   assert.equal(G.viewFor(s, a.id, new Set()).players[2].folded, true)
 })
 
+test('nobody may fold on the Flop', () => {
+  const { s, players } = table()
+  const [a, b] = players
+  toStreet(s)
+  G.applyMove(s, a.id, { type: 'bet', action: 'raise', amount: 3 })
+  assert.throws(() => G.applyMove(s, b.id, { type: 'bet', action: 'fold' }), /No folding on the Flop/)
+  assert.equal(G.viewFor(s, b.id, new Set()).game.betting.canFold, false)
+  G.applyMove(s, b.id, { type: 'bet', action: 'call' })
+  toStreet(s)
+  assert.equal(G.viewFor(s, b.id, new Set()).game.betting.canFold, true)
+})
+
 test('when everyone else folds, the last player takes the pot unseen', () => {
   const { s, players } = table()
   const [a, b] = players
+  toStreet(s)
+  checkAround(s)
   toStreet(s)
   G.applyMove(s, a.id, { type: 'bet', action: 'raise', amount: 4 })
   G.applyMove(s, b.id, { type: 'bet', action: 'fold' })
@@ -198,12 +219,18 @@ test('when everyone else folds, the last player takes the pot unseen', () => {
   assert.equal(G.viewFor(s, b.id, new Set()).players[0].holes, null)
 })
 
-test('an offline bettor is skipped with a check, or a fold if they face a bet', () => {
+test('an offline bettor is skipped with a check, or a fold if they face a bet (a call on the Flop)', () => {
   const { s, players } = table()
   const [a, b] = players
   toStreet(s)
   G.applyMove(s, a.id, { type: 'pass' })
   assert.equal(G.currentPlayer(s).id, b.id)
+  G.applyMove(s, b.id, { type: 'bet', action: 'raise', amount: 2 })
+  G.applyMove(s, a.id, { type: 'pass' })
+  assert.equal(a.folded, false)
+  assert.equal(a.chips, G.STACK - 1 - 2)
+  toStreet(s)
+  G.applyMove(s, a.id, { type: 'pass' })
   G.applyMove(s, b.id, { type: 'bet', action: 'raise', amount: 2 })
   G.applyMove(s, a.id, { type: 'pass' })
   assert.equal(a.folded, true)
