@@ -68,7 +68,7 @@ There are three betting rounds, or streets: the **Flop** after round 3, the **Tu
 
 - **Check** if nobody has bet, **call** to match the bet, or **bet** / **raise**.
 - Raises are capped so that everyone still in can afford to call. Nobody is ever all-in, and there are no side pots.
-- **Fold** to drop out of the game. You make no more moves, but you keep every chip you haven't put in. Folding opens on the Turn: on the Flop, everyone has to call or raise, so every game is contested past the first bet.
+- **Fold** to drop out of the game. You make no more moves, but you keep every chip you haven't put in.
 
 Every player's row is labelled with what everyone can see: the best hand in its in-play cards, with **+?** when that player holds hidden hole cards. Your own row shows your real hand, hole cards included. 👑 marks whoever looks to be leading from what you can see. Reading the **+?** and the betting is the bluffing game.
 
@@ -97,7 +97,7 @@ The game is built to cope with closed laptops, sleeping phones, and flaky Wi‑F
 - **Your seat belongs to you, not to your connection.** If you drop, your seat is held and you show as offline. The page reconnects by itself when you come back.
 - **Switching devices:** open the URL on the new device and tap your name under **Rejoin your seat**.
 - **Server restarts:** the table is saved to `game-state.json` after every change. `npm start` restarts the server automatically if it stops, and the game picks up exactly where it left off.
-- **Someone leaves for good:** other players can **Skip their move** while they are offline (on a betting turn, a skipped player checks, or folds if there's a bet to call; on the Flop they call instead), and the host can **Abandon game** (no winner) or remove offline players in the lobby. If the host is the one who left, anyone can **Become host** first.
+- **Someone leaves for good:** other players can **Skip their move** while they are offline (on a betting turn, a skipped player checks, or folds if there's a bet to call), and the host can **Abandon game** (no winner) or remove offline players in the lobby. If the host is the one who left, anyone can **Become host** first.
 
 ## Testing on one machine
 
