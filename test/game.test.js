@@ -221,15 +221,6 @@ test('the pot goes to the best hand, splits on a tie, and every stack is banked 
   assert.equal(players.reduce((t, p) => t + p.score, 0), 3 * G.STACK)
 })
 
-test('a saved game from before chips goes back to the lobby', () => {
-  const old = { phase: 'playing', players: [{ id: 'x', holes: [3], wins: 2 }], rows: [{}], game: { turn: 0, knockedBy: null }, gameNumber: 1, log: [] }
-  const s = G.normalizeState(old)
-  assert.equal(s.phase, 'lobby')
-  assert.equal(s.game, null)
-  assert.equal(s.players[0].score, 0)
-  assert.deepEqual(s.players[0].holes, [])
-})
-
 test('first player rotates each game and players can join between games', () => {
   const { s, players } = table()
   assert.equal(s.game.turn, 0)
@@ -317,18 +308,13 @@ test('with 2 hole cards you can hold two and choose which to put down', () => {
   assert.equal(s.rows[0].cards.length, 12)
 })
 
-test('hole card setting only changes between games and survives old saves', () => {
+test('hole card setting only changes between games', () => {
   const s = G.createState()
   G.addPlayer(s, { name: 'A' })
   G.addPlayer(s, { name: 'B' })
   assert.throws(() => G.setHoleCards(s, 3), /1 or 2/)
   G.startGame(s)
   assert.throws(() => G.setHoleCards(s, 2), /between games/)
-  // A save from before this feature: no settings, single nullable hole.
-  const old = { phase: 'lobby', players: [{ id: 'x', hole: 7 }, { id: 'y', hole: null }], rows: [], game: null, gameNumber: 0, log: [] }
-  const fixed = G.normalizeState(old)
-  assert.equal(fixed.settings.holeCards, 1)
-  assert.deepEqual(fixed.players.map((p) => p.holes), [[7], []])
 })
 
 test('players pick rows: highest score first, then round-robin; leftover rows stay neutral', () => {
@@ -395,9 +381,6 @@ test('the first player to join hosts; hosting passes on when the host leaves', (
   assert.equal(s.hostId, a.id)
   G.removePlayer(s, a.id)
   assert.equal(s.hostId, null)
-  // A save from before hosts existed gets its first player as host.
-  const old = G.normalizeState({ phase: 'lobby', players: [{ id: 'x', holes: [] }, { id: 'y', holes: [] }], rows: [], game: null, gameNumber: 0, log: [] })
-  assert.equal(old.hostId, 'x')
 })
 
 test('hole cards count toward a hand, including at the showdown', () => {

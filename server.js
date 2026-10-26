@@ -24,7 +24,7 @@ let state = loadState()
 function loadState() {
   if (process.argv.includes('--fresh') || !existsSync(STATE_FILE)) return G.createState()
   try {
-    const s = G.normalizeState(JSON.parse(readFileSync(STATE_FILE, 'utf8')))
+    const s = JSON.parse(readFileSync(STATE_FILE, 'utf8'))
     console.log(`Resumed saved table from ${STATE_FILE} (${s.players.length} players, phase: ${s.phase})`)
     return s
   } catch (e) {
