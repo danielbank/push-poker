@@ -47,7 +47,7 @@ test('shift column rotates through all four rows, including neutral ones', () =>
   assert.deepEqual(s.rows.map((r) => r.cards[2]), [2, 15, 28, 41])
 })
 
-test('pick up and put down keep five in play', () => {
+test('picking up keeps five in play, and hole cards cannot go back into your own row', () => {
   const { s, players } = table()
   const [a, b] = players
   G.applyMove(s, a.id, { type: 'pickUp', col: 1, fill: 'right' })
@@ -61,12 +61,7 @@ test('pick up and put down keep five in play', () => {
   assert.deepEqual(a.holes, [1])
   G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
   assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'left' }), /already hold/)
-  // Insert before slot 2, push out the left end.
-  const before = s.rows[0].cards.slice(0, 5)
-  G.applyMove(s, a.id, { type: 'putDown', slot: 2, eject: 'left' })
-  assert.deepEqual(a.holes, [])
-  assert.deepEqual(s.rows[0].cards.slice(0, 5), [before[1], 1, before[2], before[3], before[4]])
-  assert.equal(s.rows[0].cards.length, 13)
+  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', hole: 0, slot: 2, eject: 'left' }), /Unknown move/)
 })
 
 test('turn order is enforced', () => {
@@ -251,18 +246,6 @@ test('spectator view with neutral rows does not throw', () => {
   assert.doesNotThrow(() => G.viewFor(s, null, new Set()))
 })
 
-test('putting the hole card down at an end cannot push it straight back out', () => {
-  const { s, players } = table()
-  const [a, b] = players
-  G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' })
-  G.applyMove(s, b.id, { type: 'shiftRow', dir: 'left' })
-  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', slot: 0, eject: 'left' }), /straight out of play/)
-  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', slot: 5, eject: 'right' }), /straight out of play/)
-  G.applyMove(s, a.id, { type: 'putDown', slot: 0, eject: 'right' })
-  assert.equal(s.rows[0].cards[0], 0)
-  assert.deepEqual(a.holes, [])
-})
-
 test('table labels show in-play cards; your own hand and leaders include your hole cards', () => {
   const { s, players } = table()
   const [a, b] = players
@@ -284,7 +267,7 @@ test('table labels show in-play cards; your own hand and leaders include your ho
   assert.equal(G.viewFor(s, null, new Set()).game.yourHand, null)
 })
 
-test('with 2 hole cards you can hold two and choose which to put down', () => {
+test('with 2 hole cards you can hold two and choose which to plant', () => {
   const s = G.createState()
   const [a, b] = ['A', 'B'].map((name) => G.addPlayer(s, { name }))
   G.setHoleCards(s, 2)
@@ -300,12 +283,12 @@ test('with 2 hole cards you can hold two and choose which to put down', () => {
   pass()
   assert.throws(() => G.applyMove(s, a.id, { type: 'pickUp', col: 0, fill: 'right' }), /already hold 2/)
 
-  // Put down the second hole card (2♠) at slot 1.
-  assert.throws(() => G.applyMove(s, a.id, { type: 'putDown', hole: 2, slot: 1, eject: 'right' }), /which hole card/)
-  G.applyMove(s, a.id, { type: 'putDown', hole: 1, slot: 1, eject: 'right' })
+  // Plant the second hole card (2♠) in B's row.
+  assert.throws(() => G.applyMove(s, a.id, { type: 'plant', hole: 2, row: 1, col: 1 }), /which hole card/)
+  G.applyMove(s, a.id, { type: 'plant', hole: 1, row: 1, col: 1 })
   assert.deepEqual(a.holes, [0])
-  assert.equal(s.rows[0].cards[1], 1)
-  assert.equal(s.rows[0].cards.length, 12)
+  assert.equal(s.rows[1].cards[1], 1)
+  assert.equal(s.rows[1].cards.length, 14)
 })
 
 test('hole card setting only changes between games', () => {

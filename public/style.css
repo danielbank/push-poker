@@ -299,22 +299,6 @@ main {
 .col-flash { animation: colflash 1.2s ease-out; }
 @keyframes colflash { from { box-shadow: 0 0 0 3px var(--gold), 0 2px 4px rgba(0, 0, 0, 0.45); } }
 
-/* Insert markers for putting a hole card down */
-.slot {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  width: 16px;
-  margin-left: -8px;
-  border-radius: 8px;
-  background: var(--gold);
-  color: #2a1a07;
-  font-weight: 900;
-  font-size: 14px;
-  box-shadow: 0 0 10px var(--gold);
-  z-index: 2;
-}
-.slot.on { background: #fff; box-shadow: 0 0 0 3px var(--gold), 0 0 18px #fff; width: 22px; margin-left: -11px; z-index: 3; }
 
 /* Your hand area */
 .mine-bar {
@@ -429,7 +413,7 @@ kbd {
 .prompt .keys { margin-left: 6px; white-space: nowrap; }
 /* Only devices with a keyboard-and-mouse style pointer get the hints. */
 @media not ((hover: hover) and (pointer: fine)) {
-  .kbd-hint, .prompt .keys { display: none; }
+  .kbd-hint, .prompt .keys, .hk { display: none; }
 }
 
 /* Table hands */
@@ -640,3 +624,8 @@ main:has(.table-layout) { max-width: 1280px; }
   .score > span:not([class]) { overflow: hidden; text-overflow: ellipsis; }
   .score .host-tag { display: none; }
 }
+
+/* Keyboard hints on buttons (hidden on touch screens, with the other key hints). */
+.hk { margin-left: 4px; }
+.hk kbd { font-size: 11px; }
+.btn .hk kbd { color: inherit; background: rgba(255, 255, 255, 0.15); border-color: currentColor; opacity: 0.8; }
